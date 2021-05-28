@@ -115,7 +115,7 @@ class MADDPGAgentTrainer(AgentTrainer):
         self.n = len(obs_shape_n)
         self.agent_index = agent_index
         self.args = args
-        obs_ph_n = []
+        obs_ph_n = [] # all agents' observation
         for i in range(self.n):
             obs_ph_n.append(U.BatchInput(obs_shape_n[i], name="observation"+str(i)).get())
 

@@ -74,6 +74,10 @@ def get_trainers(env, num_adversaries, obs_shape_n, arglist):
             local_q_func=(arglist.good_policy=='ddpg')))
     return trainers
 
+def create_dirs(arglist):
+    import os
+    os.makedirs(os.path.dirname(arglist.benchmark_dir), exist_ok=True)
+    os.makedirs(os.path.dirname(arglist.plots_dir), exist_ok=True)
 
 def train(arglist):
     with U.single_threaded_session():
@@ -94,6 +98,9 @@ def train(arglist):
         if arglist.display or arglist.restore or arglist.benchmark:
             print('Loading previous state...')
             U.load_state(arglist.load_dir)
+
+        # create dirs for saving benchmark data and reward data
+        create_dirs(arglist)
 
         episode_rewards = [0.0]  # sum of rewards for all agents
         agent_rewards = [[0.0] for _ in range(env.n)]  # individual agent reward
