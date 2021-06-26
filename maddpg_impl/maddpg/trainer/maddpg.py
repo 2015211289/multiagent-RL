@@ -194,3 +194,6 @@ class MADDPGAgentTrainer(AgentTrainer):
         self.q_update()
 
         return [q_loss, p_loss, np.mean(target_q), np.mean(rew), np.mean(target_q_next), np.std(target_q)]
+
+    def sample(self, batch_size):
+        return self.replay_buffer.sample(batch_size)

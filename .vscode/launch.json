@@ -9,7 +9,7 @@
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/maddpg_impl/experiments/train.py",
-            "args" : ["--scenario","simple_speaker_listener"]
+            "args" : ["--scenario","simple_adversary","--num-episodes","10000","--reward-shaping-ag","--reward-shaping-adv"]
         }
     ]
 }

@@ -4,9 +4,11 @@ import tensorflow as tf
 import time
 import pickle
 
-import maddpg.common.tf_util as U
-from maddpg.trainer.maddpg import MADDPGAgentTrainer
+import maddpg_impl.maddpg.common.tf_util as U
+from maddpg_impl.maddpg.trainer.maddpg import MADDPGAgentTrainer
 import tensorflow.contrib.layers as layers
+from maddpg_impl.reward_shaping.embedding_model import EmbeddingModel,compute_intrinsic_reward
+from maddpg_impl.reward_shaping.config import Config
 
 def parse_args():
     parser = argparse.ArgumentParser("Reinforcement Learning experiments for multiagent environments")
@@ -23,7 +25,7 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, default=1024, help="number of episodes to optimize at the same time")
     parser.add_argument("--num-units", type=int, default=64, help="number of units in the mlp")
     # Checkpointing
-    parser.add_argument("--exp-name", type=str, default=None, help="name of the experiment")
+    parser.add_argument("--exp-name", type=str, default="test", help="name of the experiment")
     parser.add_argument("--save-dir", type=str, default="/tmp/policy/", help="directory in which training state and model should be saved")
     parser.add_argument("--save-rate", type=int, default=1000, help="save model once every time this many episodes are completed")
     parser.add_argument("--load-dir", type=str, default="", help="directory in which training state and model are loaded")
@@ -34,6 +36,8 @@ def parse_args():
     parser.add_argument("--benchmark-iters", type=int, default=100000, help="number of iterations run for benchmarking")
     parser.add_argument("--benchmark-dir", type=str, default="./benchmark_files/", help="directory where benchmark data is saved")
     parser.add_argument("--plots-dir", type=str, default="./learning_curves/", help="directory where plot data is saved")
+    parser.add_argument("--reward-shaping-ag", action="store_true", default=False, help="whether enable reward shaping of agents")
+    parser.add_argument("--reward-shaping-adv", action="store_true", default=False, help="whether enable reward shaping of adversaries")
     return parser.parse_args()
 
 def mlp_model(input, num_outputs, scope, reuse=False, num_units=64, rnn_cell=None):
@@ -53,6 +57,12 @@ def make_env(scenario_name, arglist, benchmark=False):
     scenario = scenarios.load(scenario_name + ".py").Scenario()
     # create world
     world = scenario.make_world()
+    try:
+        arglist.num_adversaries = len(scenario.adversaries(world))
+    except:
+        arglist.num_adversaries = 0
+        arglist.reward_shaping_adv = False
+    print("adversary agents number is {}".format(arglist.num_adversaries))
     # create multiagent environment
     if benchmark:
         env = MultiAgentEnv(world, scenario.reset_world, scenario.reward, scenario.observation, scenario.benchmark_data)
@@ -79,12 +89,20 @@ def create_dirs(arglist):
     os.makedirs(os.path.dirname(arglist.benchmark_dir), exist_ok=True)
     os.makedirs(os.path.dirname(arglist.plots_dir), exist_ok=True)
 
+def transform_obs_n(obs_n):
+    import torch
+    input = obs_n[0]
+    for i in range(1, len(obs_n)):
+        input = np.append(input, obs_n[i])
+    return torch.from_numpy(input).float()
+
 def train(arglist):
     with U.single_threaded_session():
         # Create environment
         env = make_env(arglist.scenario, arglist, arglist.benchmark)
         # Create agent trainers
         obs_shape_n = [env.observation_space[i].shape for i in range(env.n)]
+        action_shape_n = [env.action_space[i].n for i in range(env.n)]
         num_adversaries = min(env.n, arglist.num_adversaries)
         trainers = get_trainers(env, num_adversaries, obs_shape_n, arglist)
         print('Using good policy {} and adv policy {}'.format(arglist.good_policy, arglist.adv_policy))
@@ -104,6 +122,7 @@ def train(arglist):
 
         episode_rewards = [0.0]  # sum of rewards for all agents
         agent_rewards = [[0.0] for _ in range(env.n)]  # individual agent reward
+        agent_original_rewards = [[0.0] for _ in range(env.n)]  # individual original agent reward
         final_ep_rewards = []  # sum of rewards for training curve
         final_ep_ag_rewards = []  # agent rewards for training curve
         agent_info = [[[]]]  # placeholder for benchmarking info
@@ -111,14 +130,40 @@ def train(arglist):
         obs_n = env.reset()
         episode_step = 0
         train_step = 0
-        t_start = time.time()
+        # two teams embedding network
+        embedding_model_adv = EmbeddingModel(obs_size=obs_shape_n[0:num_adversaries], num_outputs=action_shape_n[0:num_adversaries])
+        embedding_model_ag = EmbeddingModel(obs_size=obs_shape_n[num_adversaries:], num_outputs=action_shape_n[num_adversaries:])
+        episodic_memory_adv = []
+        episodic_memory_ag = []
+        if arglist.reward_shaping_adv:
+            episodic_memory_adv.append(embedding_model_adv.embedding(transform_obs_n(obs_n[0:num_adversaries])))
+        if arglist.reward_shaping_ag:
+            episodic_memory_ag.append(embedding_model_ag.embedding(transform_obs_n(obs_n[num_adversaries:])))
 
+        t_start = time.time()
         print('Starting iterations...')
         while True:
             # get action
             action_n = [agent.action(obs) for agent, obs in zip(trainers,obs_n)]
             # environment step
             new_obs_n, rew_n, done_n, info_n = env.step(action_n)
+            original_rew_n = rew_n.copy()
+            
+            # add reward shaping
+            if arglist.reward_shaping_adv == True:
+                next_state_emb_adv = embedding_model_adv.embedding(transform_obs_n(new_obs_n[0:num_adversaries]))
+                intrinsic_reward_adv = compute_intrinsic_reward(episodic_memory_adv, next_state_emb_adv)
+                episodic_memory_adv.append(next_state_emb_adv)
+                for i in range(0,num_adversaries):
+                    rew_n[i] += Config.beta * intrinsic_reward_adv
+
+            if arglist.reward_shaping_ag == True:
+                next_state_emb_ag = embedding_model_ag.embedding(transform_obs_n(new_obs_n[num_adversaries:]))
+                intrinsic_reward_ag = compute_intrinsic_reward(episodic_memory_ag, next_state_emb_ag)
+                episodic_memory_ag.append(next_state_emb_ag)
+                for i in range(num_adversaries,env.n):
+                    rew_n[i] += Config.beta * intrinsic_reward_ag
+
             episode_step += 1
             done = all(done_n)
             terminal = (episode_step >= arglist.max_episode_len)
@@ -130,6 +175,7 @@ def train(arglist):
             for i, rew in enumerate(rew_n):
                 episode_rewards[-1] += rew
                 agent_rewards[i][-1] += rew
+                agent_original_rewards[i][-1] += original_rew_n[i]
 
             if done or terminal:
                 obs_n = env.reset()
@@ -137,7 +183,17 @@ def train(arglist):
                 episode_rewards.append(0)
                 for a in agent_rewards:
                     a.append(0)
+                for a in agent_original_rewards:
+                    a.append(0)
                 agent_info.append([[]])
+
+                # reset episode embedding network\
+                episodic_memory_adv.clear()
+                episodic_memory_ag.clear()
+                if arglist.reward_shaping_adv:
+                    episodic_memory_adv.append(embedding_model_adv.embedding(transform_obs_n(obs_n[0:num_adversaries])))
+                if arglist.reward_shaping_ag:
+                    episodic_memory_ag.append(embedding_model_ag.embedding(transform_obs_n(obs_n[num_adversaries:])))
 
             # increment global step counter
             train_step += 1
@@ -166,6 +222,35 @@ def train(arglist):
                 agent.preupdate()
             for agent in trainers:
                 loss = agent.update(trainers, train_step)
+            
+            # train embedding network
+            obs_n_train = []
+            obs_next_n_train = []
+            act_n_train = []
+            embedding_loss_ag = None
+            embedding_loss_adv = None
+            if train_step > 0 and (arglist.reward_shaping_adv or arglist.reward_shaping_ag):
+            
+                if arglist.reward_shaping_adv == True:
+                    for i in range(0,num_adversaries):
+                        obs, act, rew, obs_next, done = trainers[i].sample(Config.train_episode_num)
+                        obs_n_train.append(obs)
+                        obs_next_n_train.append(obs_next)
+                        act_n_train.append(act)
+
+                    embedding_loss_adv = embedding_model_adv.train_model(obs_n_train,obs_next_n_train,act_n_train)
+
+                if arglist.reward_shaping_ag == True:
+                    obs_n_train = []
+                    obs_next_n_train = []
+                    act_n_train = []
+                    for i in range(num_adversaries,env.n):
+                        obs, act, rew, obs_next, done = trainers[i].sample(Config.train_episode_num)
+                        obs_n_train.append(obs)
+                        obs_next_n_train.append(obs_next)
+                        act_n_train.append(act)
+
+                    embedding_loss_ag = embedding_model_ag.train_model(obs_n_train,obs_next_n_train,act_n_train)
 
             # save model, display training output
             if terminal and (len(episode_rewards) % arglist.save_rate == 0):
@@ -178,6 +263,16 @@ def train(arglist):
                     print("steps: {}, episodes: {}, mean episode reward: {}, agent episode reward: {}, time: {}".format(
                         train_step, len(episode_rewards), np.mean(episode_rewards[-arglist.save_rate:]),
                         [np.mean(rew[-arglist.save_rate:]) for rew in agent_rewards], round(time.time()-t_start, 3)))
+                
+                if arglist.reward_shaping_adv:
+                    print("adv agent original episode reward: {}".format(
+                        [np.mean(rew[-arglist.save_rate:]) for rew in agent_original_rewards[0:num_adversaries]]
+                    ))
+
+                if arglist.reward_shaping_ag:
+                    print("agent original episode reward: {}".format(
+                        [np.mean(rew[-arglist.save_rate:]) for rew in agent_original_rewards[num_adversaries:env.n]]
+                    ))
                 t_start = time.time()
                 # Keep track of final episode reward
                 final_ep_rewards.append(np.mean(episode_rewards[-arglist.save_rate:]))
