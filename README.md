@@ -118,3 +118,36 @@ agent original episode reward: [-17.709216704859962]
 steps: 249975, episodes: 10000, mean episode reward: 23.547046578831647, agent episode reward: [11.587567657368675, 11.587567657368675, 11.587567657368675, -11.215656393274374], time: 147.365
 adv agent original episode reward: [8.36, 8.36, 8.36]
 agent original episode reward: [-14.64864431377723]
+
+simple_speaker_listener
+steps: 24975, episodes: 1000, mean episode reward: -140.22403123260224, time: 44.346
+agent original episode reward: [-71.88730682051147, -71.88730682051147]
+steps: 49975, episodes: 2000, mean episode reward: -82.6530549295371, time: 51.119
+agent original episode reward: [-43.51673934709374, -43.51673934709374]
+steps: 74975, episodes: 3000, mean episode reward: -48.285429470507516, time: 50.607
+agent original episode reward: [-26.55910807061229, -26.55910807061229]
+steps: 99975, episodes: 4000, mean episode reward: -43.44010208376127, time: 50.558
+agent original episode reward: [-24.413038067685243, -24.413038067685243]
+steps: 124975, episodes: 5000, mean episode reward: -38.06179802051515, time: 50.817
+agent original episode reward: [-21.887524693224183, -21.887524693224183]
+steps: 149975, episodes: 6000, mean episode reward: -39.035399182570515, time: 50.763
+agent original episode reward: [-22.49619301108386, -22.49619301108386]
+steps: 174975, episodes: 7000, mean episode reward: -37.755480344606056, time: 50.655
+agent original episode reward: [-21.97396243421237, -21.97396243421237]
+steps: 199975, episodes: 8000, mean episode reward: -35.09319121150809, time: 50.739
+agent original episode reward: [-20.76903364363154, -20.76903364363154]
+steps: 224975, episodes: 9000, mean episode reward: -36.997487661256805, time: 50.958
+agent original episode reward: [-21.854461363685637, -21.854461363685637]
+steps: 249975, episodes: 10000, mean episode reward: -36.4626510910893, time: 50.925
+agent original episode reward: [-21.718212713439936, -21.718212713439936]
+
+steps: 24975, episodes: 1000, mean episode reward: -153.3029199149384, time: 12.52
+steps: 49975, episodes: 2000, mean episode reward: -143.06264352324703, time: 18.992
+steps: 74975, episodes: 3000, mean episode reward: -58.83754488678989, time: 18.779
+steps: 99975, episodes: 4000, mean episode reward: -51.319366472533325, time: 18.889
+steps: 124975, episodes: 5000, mean episode reward: -39.46129414341748, time: 18.931
+steps: 149975, episodes: 6000, mean episode reward: -31.59272499466403, time: 18.989
+steps: 174975, episodes: 7000, mean episode reward: -31.11522348735243, time: 18.859
+steps: 199975, episodes: 8000, mean episode reward: -32.037881805576596, time: 18.957
+steps: 224975, episodes: 9000, mean episode reward: -32.55319476323421, time: 19.0
+steps: 249975, episodes: 10000, mean episode reward: -32.20633825272329, time: 18.93
