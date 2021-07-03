@@ -143,7 +143,7 @@ def train(arglist):
         t_start = time.time()
         print('Starting iterations...')
         while True:
-            # get action
+            # get action: possibility distribution
             action_n = [agent.action(obs) for agent, obs in zip(trainers,obs_n)]
             # environment step
             new_obs_n, rew_n, done_n, info_n = env.step(action_n)
