@@ -1,5 +1,9 @@
 import argparse
 import numpy as np
+import os
+# use GPU or not
+# if network is small and shallow, CPU may be faster than GPU
+os.environ["CUDA_VISIBLE_DEVICES"]="-1" 
 import tensorflow as tf
 import time
 import pickle
