@@ -211,7 +211,7 @@ class MADDPGAgentTrainer(AgentTrainer):
         for i in range(num_sample):
             if self.policy != "TD3":                
                 target_act_next_n = [agents[i].p_debug['target_act'](obs_next_n[i]) for i in range(self.n)]
-                target_q_next = self.q_debug['target_q_values'](*(obs_next_n + target_act_next_n))
+                target_q_next = self.q1_debug['target_q_values'](*(obs_next_n + target_act_next_n))
                 target_q += rew + self.args.gamma * (1.0 - done) * target_q_next
             else:
                 noise = [np.clip(np.random.randn(act_n[i].shape[0],act_n[i].shape[1])*self.policy_noise,-self.noise_clip,self.noise_clip) for i in range(self.n)]

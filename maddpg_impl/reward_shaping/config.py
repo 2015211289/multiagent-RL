@@ -18,6 +18,6 @@ class Config:
     enable_ngu=True
     hidden_size=64
     embed_hidden_size = 32
-    embed_lr = 1e-5
-    beta = 0.001 
+    embed_lr = 1e-3
+    beta = 0.0001 
     train_episode_num = 5

@@ -24,7 +24,7 @@ def parse_args():
     parser.add_argument("--good-policy", type=str, default="TD3", help="policy for good agents")
     parser.add_argument("--adv-policy", type=str, default="TD3", help="policy of adversaries")
     # Core training parameters
-    parser.add_argument("--lr", type=float, default=1e-2, help="learning rate for Adam optimizer")
+    parser.add_argument("--lr", type=float, default=1e-3, help="learning rate for Adam optimizer")
     parser.add_argument("--gamma", type=float, default=0.95, help="discount factor")
     parser.add_argument("--batch-size", type=int, default=1024, help="number of episodes to optimize at the same time")
     parser.add_argument("--num-units", type=int, default=64, help="number of units in the mlp")
@@ -42,8 +42,8 @@ def parse_args():
     parser.add_argument("--plots-dir", type=str, default="./learning_curves/", help="directory where plot data is saved")
     parser.add_argument("--reward-shaping-ag", action="store_true", default=False, help="whether enable reward shaping of agents")
     parser.add_argument("--reward-shaping-adv", action="store_true", default=False, help="whether enable reward shaping of adversaries")
-    parser.add_argument("--policy_noise", default=0.2)      
-    parser.add_argument("--noise_clip", default=0.5)
+    parser.add_argument("--policy_noise", default=0.2,type=float)      
+    parser.add_argument("--noise_clip", default=0.5,type=float)
     parser.add_argument("--policy_freq", default=2, type=int)
 
     return parser.parse_args()
@@ -246,7 +246,7 @@ def train(arglist):
             act_n_train = []
             embedding_loss_ag = None
             embedding_loss_adv = None
-            if train_step > 0 and (arglist.reward_shaping_adv or arglist.reward_shaping_ag):
+            if train_step > 0 and train_step % 5 == 0 and (arglist.reward_shaping_adv or arglist.reward_shaping_ag):
             
                 if arglist.reward_shaping_adv == True:
                     for i in range(0,num_adversaries):
