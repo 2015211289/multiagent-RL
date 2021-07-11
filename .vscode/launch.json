@@ -5,11 +5,24 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "TD3",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/MATD3/main.py",
+            "console": "integratedTerminal",
+            "args":[]
+        },
+        {
             "name": "Python: Current File",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/maddpg_impl/experiments/train.py",
-            "args" : ["--scenario","simple_adversary","--num-episodes","10000","--reward-shaping-ag","--reward-shaping-adv"]
+            "args": [
+                "--scenario",
+                "simple_crypto",
+                "--num-episodes",
+                "10000"
+            ]
         }
     ]
 }

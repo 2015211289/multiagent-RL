@@ -50,7 +50,7 @@ def p_train(make_obs_ph_n, act_space_n, p_index, p_func, q_func, optimizer, grad
         q_input = tf.concat(obs_ph_n + act_input_n, 1)
         if local_q_func:
             q_input = tf.concat([obs_ph_n[p_index], act_input_n[p_index]], 1)
-        q = q_func(q_input, 1, scope="q_func", reuse=True, num_units=num_units)[:,0]
+        q = q_func(q_input, 1, scope="q1_scope", reuse=True, num_units=num_units)[:,0]
         pg_loss = -tf.reduce_mean(q)
 
         loss = pg_loss + p_reg * 1e-3
@@ -72,7 +72,7 @@ def p_train(make_obs_ph_n, act_space_n, p_index, p_func, q_func, optimizer, grad
 
         return act, train, update_target_p, {'p_values': p_values, 'target_act': target_act}
 
-def q_train(make_obs_ph_n, act_space_n, q_index, q_func, optimizer, grad_norm_clipping=None, local_q_func=False, scope="trainer", reuse=None, num_units=64):
+def q_train(make_obs_ph_n, act_space_n, q_index, q_func, q_scope, optimizer, grad_norm_clipping=None, local_q_func=False, scope="trainer", reuse=None, num_units=64):
     with tf.variable_scope(scope, reuse=reuse):
         # create distribtuions
         act_pdtype_n = [make_pdtype(act_space) for act_space in act_space_n]
@@ -85,8 +85,8 @@ def q_train(make_obs_ph_n, act_space_n, q_index, q_func, optimizer, grad_norm_cl
         q_input = tf.concat(obs_ph_n + act_ph_n, 1)
         if local_q_func:
             q_input = tf.concat([obs_ph_n[q_index], act_ph_n[q_index]], 1)
-        q = q_func(q_input, 1, scope="q_func", num_units=num_units)[:,0]
-        q_func_vars = U.scope_vars(U.absolute_scope_name("q_func"))
+        q = q_func(q_input, 1, scope=q_scope, num_units=num_units)[:,0]
+        q_func_vars = U.scope_vars(U.absolute_scope_name(q_scope))
 
         q_loss = tf.reduce_mean(tf.square(q - target_ph))
 
@@ -101,8 +101,8 @@ def q_train(make_obs_ph_n, act_space_n, q_index, q_func, optimizer, grad_norm_cl
         q_values = U.function(obs_ph_n + act_ph_n, q)
 
         # target network
-        target_q = q_func(q_input, 1, scope="target_q_func", num_units=num_units)[:,0]
-        target_q_func_vars = U.scope_vars(U.absolute_scope_name("target_q_func"))
+        target_q = q_func(q_input, 1, scope="target_"+q_scope, num_units=num_units)[:,0]
+        target_q_func_vars = U.scope_vars(U.absolute_scope_name("target_"+q_scope))
         update_target_q = make_update_exp(q_func_vars, target_q_func_vars)
 
         target_q_values = U.function(obs_ph_n + act_ph_n, target_q)
@@ -120,17 +120,33 @@ class MADDPGAgentTrainer(AgentTrainer):
             obs_ph_n.append(U.BatchInput(obs_shape_n[i], name="observation"+str(i)).get())
 
         # Create all the functions necessary to train the model
-        self.q_train, self.q_update, self.q_debug = q_train(
+        # two q network
+        self.q1_train, self.q1_update, self.q1_debug = q_train(
             scope=self.name,
             make_obs_ph_n=obs_ph_n,
             act_space_n=act_space_n,
             q_index=agent_index,
             q_func=model,
+            q_scope="q1_scope",
             optimizer=tf.train.AdamOptimizer(learning_rate=args.lr),
             grad_norm_clipping=0.5,
             local_q_func=local_q_func,
             num_units=args.num_units
         )
+        self.q2_train, self.q2_update, self.q2_debug = q_train(
+            scope=self.name,
+            make_obs_ph_n=obs_ph_n,
+            act_space_n=act_space_n,
+            q_index=agent_index,
+            q_func=model,
+            q_scope="q2_scope",
+            optimizer=tf.train.AdamOptimizer(learning_rate=args.lr),
+            grad_norm_clipping=0.5,
+            local_q_func=local_q_func,
+            num_units=args.num_units
+        )
+
+        # Use q1 to act
         self.act, self.p_train, self.p_update, self.p_debug = p_train(
             scope=self.name,
             make_obs_ph_n=obs_ph_n,
@@ -148,6 +164,16 @@ class MADDPGAgentTrainer(AgentTrainer):
         self.max_replay_buffer_len = args.batch_size * args.max_episode_len
         self.replay_sample_index = None
 
+        # TD3
+        if self.agent_index<self.args.num_adversaries:
+            self.policy = self.args.adv_policy
+        else:
+            self.policy = self.args.good_policy
+        self.policy_noise = args.policy_noise
+        self.noise_clip = args.noise_clip
+        self.policy_freq = args.policy_freq
+        self.total_it=0
+
     def action(self, obs):
         return self.act(obs[None])[0]
 
@@ -159,6 +185,8 @@ class MADDPGAgentTrainer(AgentTrainer):
         self.replay_sample_index = None
 
     def update(self, agents, t):
+        self.total_it+=1
+
         if len(self.replay_buffer) < self.max_replay_buffer_len: # replay buffer is not large enough
             return
         if not t % 100 == 0:  # only update every 100 steps
@@ -181,19 +209,39 @@ class MADDPGAgentTrainer(AgentTrainer):
         num_sample = 1
         target_q = 0.0
         for i in range(num_sample):
-            target_act_next_n = [agents[i].p_debug['target_act'](obs_next_n[i]) for i in range(self.n)]
-            target_q_next = self.q_debug['target_q_values'](*(obs_next_n + target_act_next_n))
-            target_q += rew + self.args.gamma * (1.0 - done) * target_q_next
+            if self.policy != "TD3":                
+                target_act_next_n = [agents[i].p_debug['target_act'](obs_next_n[i]) for i in range(self.n)]
+                target_q_next = self.q_debug['target_q_values'](*(obs_next_n + target_act_next_n))
+                target_q += rew + self.args.gamma * (1.0 - done) * target_q_next
+            else:
+                noise = [np.clip(np.random.randn(act_n[i].shape[0],act_n[i].shape[1])*self.policy_noise,-self.noise_clip,self.noise_clip) for i in range(self.n)]
+                target_act_next_n = [agents[i].p_debug['target_act'](obs_next_n[i])+noise[i] for i in range(self.n)]
+                target_q1_next = self.q1_debug['target_q_values'](*(obs_next_n + target_act_next_n))
+                target_q2_next = self.q2_debug['target_q_values'](*(obs_next_n + target_act_next_n))
+                target_q_next = [min(target_q1_next[i],target_q2_next[i]) for i in range(len(target_q1_next))]
+                target_q += rew + self.args.gamma * (1.0 - done) * target_q_next
         target_q /= num_sample
-        q_loss = self.q_train(*(obs_n + act_n + [target_q]))
 
+        q1_loss = self.q1_train(*(obs_n + act_n + [target_q]))
+        q2_loss = 0
+        if self.policy == "TD3":  
+            q2_loss = self.q2_train(*(obs_n + act_n + [target_q]))
         # train p network
-        p_loss = self.p_train(*(obs_n + act_n))
+        if self.policy =="TD3":
+            if self.total_it % self.args.policy_freq == 0:
+                p_loss = self.p_train(*(obs_n + act_n))
+        else:
+            p_loss = self.p_train(*(obs_n + act_n))
 
-        self.p_update()
-        self.q_update()
+        if self.policy !="TD3":
+            self.p_update()
+            self.q1_update()
+        else:
+            self.p_update()
+            self.q1_update()
+            self.q2_update()
 
-        return [q_loss, p_loss, np.mean(target_q), np.mean(rew), np.mean(target_q_next), np.std(target_q)]
+        return [q1_loss+q2_loss, p_loss, np.mean(target_q), np.mean(rew), np.mean(target_q_next), np.std(target_q)]
 
     def sample(self, batch_size):
         return self.replay_buffer.sample(batch_size)

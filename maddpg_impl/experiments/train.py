@@ -21,8 +21,8 @@ def parse_args():
     parser.add_argument("--max-episode-len", type=int, default=25, help="maximum episode length")
     parser.add_argument("--num-episodes", type=int, default=60000, help="number of episodes")
     parser.add_argument("--num-adversaries", type=int, default=0, help="number of adversaries")
-    parser.add_argument("--good-policy", type=str, default="maddpg", help="policy for good agents")
-    parser.add_argument("--adv-policy", type=str, default="maddpg", help="policy of adversaries")
+    parser.add_argument("--good-policy", type=str, default="TD3", help="policy for good agents")
+    parser.add_argument("--adv-policy", type=str, default="TD3", help="policy of adversaries")
     # Core training parameters
     parser.add_argument("--lr", type=float, default=1e-2, help="learning rate for Adam optimizer")
     parser.add_argument("--gamma", type=float, default=0.95, help="discount factor")
@@ -42,6 +42,10 @@ def parse_args():
     parser.add_argument("--plots-dir", type=str, default="./learning_curves/", help="directory where plot data is saved")
     parser.add_argument("--reward-shaping-ag", action="store_true", default=False, help="whether enable reward shaping of agents")
     parser.add_argument("--reward-shaping-adv", action="store_true", default=False, help="whether enable reward shaping of adversaries")
+    parser.add_argument("--policy_noise", default=0.2)      
+    parser.add_argument("--noise_clip", default=0.5)
+    parser.add_argument("--policy_freq", default=2, type=int)
+
     return parser.parse_args()
 
 def mlp_model(input, num_outputs, scope, reuse=False, num_units=64, rnn_cell=None):
@@ -106,7 +110,13 @@ def train(arglist):
         env = make_env(arglist.scenario, arglist, arglist.benchmark)
         # Create agent trainers
         obs_shape_n = [env.observation_space[i].shape for i in range(env.n)]
-        action_shape_n = [env.action_space[i].n for i in range(env.n)]
+        action_shape_n = []
+        for i in range(env.n):
+            if hasattr(env.action_space[i],"n"):
+                action_shape_n.append(env.action_space[i].n)
+            else:
+                action_shape_n.append(env.action_space[i].shape)
+
         num_adversaries = min(env.n, arglist.num_adversaries)
         trainers = get_trainers(env, num_adversaries, obs_shape_n, arglist)
         print('Using good policy {} and adv policy {}'.format(arglist.good_policy, arglist.adv_policy))
@@ -125,6 +135,7 @@ def train(arglist):
         create_dirs(arglist)
 
         episode_rewards = [0.0]  # sum of rewards for all agents
+        episode_original_rewards = [0.0]  # sum of original rewards for all agents
         agent_rewards = [[0.0] for _ in range(env.n)]  # individual agent reward
         agent_original_rewards = [[0.0] for _ in range(env.n)]  # individual original agent reward
         final_ep_rewards = []  # sum of rewards for training curve
@@ -178,6 +189,7 @@ def train(arglist):
 
             for i, rew in enumerate(rew_n):
                 episode_rewards[-1] += rew
+                episode_original_rewards[-1] += original_rew_n[i]
                 agent_rewards[i][-1] += rew
                 agent_original_rewards[i][-1] += original_rew_n[i]
 
@@ -185,6 +197,7 @@ def train(arglist):
                 obs_n = env.reset()
                 episode_step = 0
                 episode_rewards.append(0)
+                episode_original_rewards.append(0)
                 for a in agent_rewards:
                     a.append(0)
                 for a in agent_original_rewards:
@@ -265,22 +278,22 @@ def train(arglist):
                         train_step, len(episode_rewards), np.mean(episode_rewards[-arglist.save_rate:]), round(time.time()-t_start, 3)))
                 else:
                     print("steps: {}, episodes: {}, mean episode reward: {}, agent episode reward: {}, time: {}".format(
-                        train_step, len(episode_rewards), np.mean(episode_rewards[-arglist.save_rate:]),
-                        [np.mean(rew[-arglist.save_rate:]) for rew in agent_rewards], round(time.time()-t_start, 3)))
+                        train_step, len(episode_rewards), np.mean(episode_original_rewards[-arglist.save_rate:]),
+                        [np.mean(rew[-arglist.save_rate:]) for rew in agent_original_rewards], round(time.time()-t_start, 3)))
                 
-                if arglist.reward_shaping_adv:
-                    print("adv agent original episode reward: {}".format(
-                        [np.mean(rew[-arglist.save_rate:]) for rew in agent_original_rewards[0:num_adversaries]]
-                    ))
+                # if arglist.reward_shaping_adv:
+                #     print("adv agent original episode reward: {}".format(
+                #         [np.mean(rew[-arglist.save_rate:]) for rew in agent_original_rewards[0:num_adversaries]]
+                #     ))
 
-                if arglist.reward_shaping_ag:
-                    print("agent original episode reward: {}".format(
-                        [np.mean(rew[-arglist.save_rate:]) for rew in agent_original_rewards[num_adversaries:env.n]]
-                    ))
+                # if arglist.reward_shaping_ag:
+                #     print("agent original episode reward: {}".format(
+                #         [np.mean(rew[-arglist.save_rate:]) for rew in agent_original_rewards[num_adversaries:env.n]]
+                #     ))
                 t_start = time.time()
                 # Keep track of final episode reward
-                final_ep_rewards.append(np.mean(episode_rewards[-arglist.save_rate:]))
-                for rew in agent_rewards:
+                final_ep_rewards.append(np.mean(episode_original_rewards[-arglist.save_rate:]))
+                for rew in agent_original_rewards:
                     final_ep_ag_rewards.append(np.mean(rew[-arglist.save_rate:]))
 
             # saves final episode reward for plotting training curve later
