@@ -21,7 +21,13 @@
                 "--scenario",
                 "simple_crypto",
                 "--num-episodes",
-                "10000"
+                "10000",
+                "--good-policy",
+                "maddpg",
+                "--adv-policy",
+                "maddpg",
+                "--reward-shaping-ag",
+                "--reward-shaping-adv"
             ]
         }
     ]
