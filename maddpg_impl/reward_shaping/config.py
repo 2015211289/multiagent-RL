@@ -17,7 +17,7 @@ class Config:
     random_seed=42
     enable_ngu=True
     hidden_size=64
-    embed_hidden_size = 32
-    embed_lr = 1e-3
+    embed_hidden_size = 16
+    embed_lr = 1e-4
     beta = 0.0001 
     train_episode_num = 5

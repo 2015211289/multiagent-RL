@@ -20,6 +20,7 @@ class EmbeddingModel(nn.Module):
             self.num_outputs += m
 
         self.fc1 = nn.Linear(self.obs_size, Config.embed_hidden_size)
+        self.fc2 = nn.Linear(Config.embed_hidden_size, Config.embed_hidden_size)
         self.last = nn.Linear(Config.embed_hidden_size * 2, self.num_outputs)
 
         self.optimizer = optim.Adam(self.parameters(), lr=Config.embed_lr)
@@ -37,6 +38,7 @@ class EmbeddingModel(nn.Module):
         # for i in range(1, len(x)):
         #     input = np.append(input, x[i])
         x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
         return x
 
     def train_model(self, obs_n, obs_next_n, act_n):
@@ -97,6 +99,8 @@ def compute_intrinsic_reward(episodic_memory,
     state_dist = state_dist[:k]
     dist = [d[1].item() for d in state_dist]
     dist = np.array(dist)
+
+    dist = dist / np.mean(dist)
 
     dist = np.max(dist - kernel_cluster_distance, 0)
     kernel = kernel_epsilon / (dist + kernel_epsilon)

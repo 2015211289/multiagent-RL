@@ -246,7 +246,7 @@ def train(arglist):
             act_n_train = []
             embedding_loss_ag = None
             embedding_loss_adv = None
-            if train_step > 0 and train_step % 5 == 0 and (arglist.reward_shaping_adv or arglist.reward_shaping_ag):
+            if train_step > 0 and (arglist.reward_shaping_adv or arglist.reward_shaping_ag):
             
                 if arglist.reward_shaping_adv == True:
                     for i in range(0,num_adversaries):
