@@ -275,7 +275,7 @@ def train(arglist):
                 # print statement depends on whether or not there are adversaries
                 if num_adversaries == 0:
                     print("steps: {}, episodes: {}, mean episode reward: {}, time: {}".format(
-                        train_step, len(episode_rewards), np.mean(episode_rewards[-arglist.save_rate:]), round(time.time()-t_start, 3)))
+                        train_step, len(episode_rewards), np.mean(episode_original_rewards[-arglist.save_rate:]), round(time.time()-t_start, 3)))
                 else:
                     print("steps: {}, episodes: {}, mean episode reward: {}, agent episode reward: {}, time: {}".format(
                         train_step, len(episode_rewards), np.mean(episode_original_rewards[-arglist.save_rate:]),
