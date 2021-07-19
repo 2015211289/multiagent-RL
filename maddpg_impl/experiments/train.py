@@ -3,7 +3,7 @@ import numpy as np
 import os
 # use GPU or not
 # if network is small and shallow, CPU may be faster than GPU
-os.environ["CUDA_VISIBLE_DEVICES"]="-1" 
+# os.environ["CUDA_VISIBLE_DEVICES"]="-1" 
 import tensorflow as tf
 import time
 import pickle
@@ -18,8 +18,8 @@ def parse_args():
     parser = argparse.ArgumentParser("Reinforcement Learning experiments for multiagent environments")
     # Environment
     parser.add_argument("--scenario", type=str, default="simple", help="name of the scenario script")
-    parser.add_argument("--max-episode-len", type=int, default=25, help="maximum episode length")
-    parser.add_argument("--num-episodes", type=int, default=60000, help="number of episodes")
+    parser.add_argument("--max-episode-len", type=int, default=2000, help="maximum episode length")
+    parser.add_argument("--num-episodes", type=int, default=1000, help="number of episodes")
     parser.add_argument("--num-adversaries", type=int, default=0, help="number of adversaries")
     parser.add_argument("--good-policy", type=str, default="TD3", help="policy for good agents")
     parser.add_argument("--adv-policy", type=str, default="TD3", help="policy of adversaries")
@@ -27,11 +27,11 @@ def parse_args():
     parser.add_argument("--lr", type=float, default=1e-3, help="learning rate for Adam optimizer")
     parser.add_argument("--gamma", type=float, default=0.95, help="discount factor")
     parser.add_argument("--batch-size", type=int, default=1024, help="number of episodes to optimize at the same time")
-    parser.add_argument("--num-units", type=int, default=64, help="number of units in the mlp")
+    parser.add_argument("--num-units", type=int, default=128, help="number of units in the mlp")
     # Checkpointing
     parser.add_argument("--exp-name", type=str, default="test", help="name of the experiment")
     parser.add_argument("--save-dir", type=str, default="/tmp/policy/", help="directory in which training state and model should be saved")
-    parser.add_argument("--save-rate", type=int, default=1000, help="save model once every time this many episodes are completed")
+    parser.add_argument("--save-rate", type=int, default=10, help="save model once every time this many episodes are completed")
     parser.add_argument("--load-dir", type=str, default="", help="directory in which training state and model are loaded")
     # Evaluation
     parser.add_argument("--restore", action="store_true", default=False)
@@ -45,6 +45,9 @@ def parse_args():
     parser.add_argument("--policy_noise", default=0.2,type=float)      
     parser.add_argument("--noise_clip", default=0.5,type=float)
     parser.add_argument("--policy_freq", default=2, type=int)
+    parser.add_argument("--pettingzoo", action="store_true", default=False)
+    parser.add_argument("--start_timesteps", default=5, type=int)
+
 
     return parser.parse_args()
 
@@ -60,6 +63,13 @@ def mlp_model(input, num_outputs, scope, reuse=False, num_units=64, rnn_cell=Non
 def make_env(scenario_name, arglist, benchmark=False):
     from multiagent.environment import MultiAgentEnv
     import multiagent.scenarios as scenarios
+    from maddpg_impl.experiments.pz import create_env
+
+    if arglist.pettingzoo:
+        env = create_env()
+        arglist.num_adversaries = 1
+        print("adversary agents number is {}".format(arglist.num_adversaries))
+        return env
 
     # load scenario from script
     scenario = scenarios.load(scenario_name + ".py").Scenario()
@@ -82,14 +92,25 @@ def get_trainers(env, num_adversaries, obs_shape_n, arglist):
     trainers = []
     model = mlp_model
     trainer = MADDPGAgentTrainer
-    for i in range(num_adversaries):
+    if not arglist.pettingzoo:
+        for i in range(num_adversaries):
+            trainers.append(trainer(
+                "agent_%d" % i, model, obs_shape_n, env.action_space, i, arglist,
+                local_q_func=(arglist.adv_policy=='ddpg')))
+        for i in range(num_adversaries, env.n):
+            trainers.append(trainer(
+                "agent_%d" % i, model, obs_shape_n, env.action_space, i, arglist,
+                local_q_func=(arglist.good_policy=='ddpg')))
+    else:
+
         trainers.append(trainer(
-            "agent_%d" % i, model, obs_shape_n, env.action_space, i, arglist,
+            "agent_%d" % 0, model, obs_shape_n, env.action_spaces.values(), 0, arglist,
             local_q_func=(arglist.adv_policy=='ddpg')))
-    for i in range(num_adversaries, env.n):
+        
         trainers.append(trainer(
-            "agent_%d" % i, model, obs_shape_n, env.action_space, i, arglist,
+            "agent_%d" % 1, model, obs_shape_n, env.action_spaces.values(), 1, arglist,
             local_q_func=(arglist.good_policy=='ddpg')))
+
     return trainers
 
 def create_dirs(arglist):
@@ -109,15 +130,24 @@ def train(arglist):
         # Create environment
         env = make_env(arglist.scenario, arglist, arglist.benchmark)
         # Create agent trainers
-        obs_shape_n = [env.observation_space[i].shape for i in range(env.n)]
-        action_shape_n = []
-        for i in range(env.n):
-            if hasattr(env.action_space[i],"n"):
-                action_shape_n.append(env.action_space[i].n)
-            else:
-                action_shape_n.append(env.action_space[i].shape)
+        if not arglist.pettingzoo:
+            obs_shape_n = [env.observation_space[i].shape for i in range(env.n)]
+            action_shape_n = []
+            for i in range(env.n):
+                if hasattr(env.action_space[i],"n"):
+                    action_shape_n.append(env.action_space[i].n)
+                else:
+                    action_shape_n.append(env.action_space[i].shape)
+        else:
+            obs_shape_n = [env.observation_spaces[agent].shape for agent in (env.possible_agents)]
+            action_shape_n = []
+            for agent in env.possible_agents:
+                if hasattr(env.action_spaces[agent],"n"):
+                    action_shape_n.append(env.action_spaces[agent].n)
+                else:
+                    action_shape_n.append(env.action_spaces[agent].shape)
 
-        num_adversaries = min(env.n, arglist.num_adversaries)
+        num_adversaries = min(99, arglist.num_adversaries)
         trainers = get_trainers(env, num_adversaries, obs_shape_n, arglist)
         print('Using good policy {} and adv policy {}'.format(arglist.good_policy, arglist.adv_policy))
 
@@ -136,13 +166,26 @@ def train(arglist):
 
         episode_rewards = [0.0]  # sum of rewards for all agents
         episode_original_rewards = [0.0]  # sum of original rewards for all agents
-        agent_rewards = [[0.0] for _ in range(env.n)]  # individual agent reward
-        agent_original_rewards = [[0.0] for _ in range(env.n)]  # individual original agent reward
+        if not arglist.pettingzoo:
+            agent_rewards = [[0.0] for _ in range(env.n)]  # individual agent reward
+            agent_original_rewards = [[0.0] for _ in range(env.n)]  # individual original agent reward
+
+        else:
+            agent_rewards = [[0.0] for _ in env.possible_agents]
+            agent_original_rewards = [[0.0] for _ in env.possible_agents]  # individual original agent reward
         final_ep_rewards = []  # sum of rewards for training curve
         final_ep_ag_rewards = []  # agent rewards for training curve
         agent_info = [[[]]]  # placeholder for benchmarking info
         saver = tf.train.Saver()
-        obs_n = env.reset()
+        
+        if not arglist.pettingzoo:
+            obs_n = env.reset()
+        else:
+            t = env.reset()
+            obs_n=[]
+            for agent in env.possible_agents:
+                obs_n.append(t[agent])
+
         episode_step = 0
         train_step = 0
         # two teams embedding network
@@ -159,9 +202,22 @@ def train(arglist):
         print('Starting iterations...')
         while True:
             # get action: possibility distribution
-            action_n = [agent.action(obs) for agent, obs in zip(trainers,obs_n)]
+            # env.render()
+            action_n=[]
+            if  train_step < arglist.start_timesteps and arglist.pettingzoo:
+                for shape in action_shape_n:
+                    action = np.random.rand(shape)
+                    action = action / np.sum(action)
+                    action_n.append(action)
+
+            else:
+                action_n = [agent.action(obs) for agent, obs in zip(trainers,obs_n)]
             # environment step
-            new_obs_n, rew_n, done_n, info_n = env.step(action_n)
+            if not arglist.pettingzoo:
+                new_obs_n, rew_n, done_n, info_n = env.step(action_n)
+            else:
+                from maddpg_impl.experiments.pz import step 
+                new_obs_n, rew_n, done_n, info_n = step(action_n,env)
             original_rew_n = rew_n.copy()
             
             # add reward shaping
@@ -176,8 +232,12 @@ def train(arglist):
                 next_state_emb_ag = embedding_model_ag.embedding(transform_obs_n(new_obs_n[num_adversaries:]))
                 intrinsic_reward_ag = compute_intrinsic_reward(episodic_memory_ag, next_state_emb_ag)
                 episodic_memory_ag.append(next_state_emb_ag)
-                for i in range(num_adversaries,env.n):
-                    rew_n[i] += Config.beta * intrinsic_reward_ag
+                if not arglist.pettingzoo:
+                    for i in range(num_adversaries,env.n):
+                        rew_n[i] += Config.beta * intrinsic_reward_ag
+                else:
+                    for i in range(num_adversaries,len(env.possible_agents)):
+                        rew_n[i] += Config.beta * intrinsic_reward_ag
 
             episode_step += 1
             done = all(done_n)
@@ -194,7 +254,16 @@ def train(arglist):
                 agent_original_rewards[i][-1] += original_rew_n[i]
 
             if done or terminal:
-                obs_n = env.reset()
+                terminal = True
+                # obs_n = env.reset()
+                if not arglist.pettingzoo:
+                    obs_n = env.reset()
+                else:
+                    t = env.reset()
+                    obs_n=[]
+                    for obs in t.values():  
+                        obs_n.append(obs)
+
                 episode_step = 0
                 episode_rewards.append(0)
                 episode_original_rewards.append(0)
@@ -261,7 +330,12 @@ def train(arglist):
                     obs_n_train = []
                     obs_next_n_train = []
                     act_n_train = []
-                    for i in range(num_adversaries,env.n):
+                    n = 0
+                    if not arglist.pettingzoo:
+                        n= env.n
+                    else:
+                        n= len(env.possible_agents)
+                    for i in range(num_adversaries,n):
                         obs, act, rew, obs_next, done = trainers[i].sample(Config.train_episode_num)
                         obs_n_train.append(obs)
                         obs_next_n_train.append(obs_next)
@@ -270,7 +344,7 @@ def train(arglist):
                     embedding_loss_ag = embedding_model_ag.train_model(obs_n_train,obs_next_n_train,act_n_train)
 
             # save model, display training output
-            if terminal and (len(episode_rewards) % arglist.save_rate == 0):
+            if ( terminal) and (len(episode_rewards) % arglist.save_rate == 0):
                 U.save_state(arglist.save_dir, saver=saver)
                 # print statement depends on whether or not there are adversaries
                 if num_adversaries == 0:

@@ -5,30 +5,26 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
+        {
             "name": "TD3",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/MATD3/main.py",
             "console": "integratedTerminal",
-            "args":[]
+            "args": []
         },
         {
-            "name": "Python: Current File",
+            "name": "train",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/maddpg_impl/experiments/train.py",
-            "args": [
-                "--scenario",
-                "simple_crypto",
-                "--num-episodes",
-                "10000",
-                "--good-policy",
-                "maddpg",
-                "--adv-policy",
-                "maddpg",
-                "--reward-shaping-ag",
-                "--reward-shaping-adv"
-            ]
+            "args": ["--pettingzoo"]
         }
     ]
 }
