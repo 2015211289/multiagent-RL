@@ -1,22 +1,29 @@
-from pettingzoo.atari import tennis_v2
+from pettingzoo.atari import entombed_cooperative_v2,double_dunk_v2,space_invaders_v1,maze_craze_v2,mario_bros_v2,wizard_of_wor_v2,basketball_pong_v2,boxing_v1,othello_v2,tennis_v2
 import supersuit
 import numpy as np
 
-# observations = env.reset()
-# while True:
-#     actions = {}
-#     for agent in env.agents:
-#         actions[agent] = env.action_spaces[agent].sample()
-        
-#     observations, rewards, dones, infos = env.step(actions)
-#     env.render(mode='human')
-#     if(all(dones.values())):
-#         observations = env.reset()
+def create_env(env_name):
+    env = None
+    if env_name == "Basketball_Pong":
+        env = basketball_pong_v2.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path=None)
+    elif env_name == "Double_Dunk":
+        env = double_dunk_v2.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path=None)
+    elif env_name == "Space_Invaders":
+        env = space_invaders_v1.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path=None)
+    elif env_name == "Maze_Craze":
+        env=maze_craze_v2.parallel_env(game_version="capture",visibilty_level=0,obs_type='ram',full_action_space=False,auto_rom_install_path=None)
+    elif env_name == "Mario_Bros":
+        env=mario_bros_v2.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path=None)
+    elif env_name == "Wizard_of_Wor":
+        env = wizard_of_wor_v2.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path=None)
+    elif env_name =="Box":
+        env = boxing_v1.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path=None)
+    elif env_name == "Othello":
+        env  = othello_v2.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path=None)
+    elif env_name == "Tennis":
+        env = tennis_v2.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path=None)
 
-# env.close()
 
-def create_env():
-    env = tennis_v2.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path=None)
     # as per openai baseline's MaxAndSKip wrapper, maxes over the last 2 frames
     # to deal with frame flickering
     env = supersuit.max_observation_v0(env, 2)
@@ -38,10 +45,10 @@ def create_env():
 
 
 def step(actions,env):
-    #TODO: 确认顺序
+    # TODO: 确认顺序
     targetActions = {}
     i=0
-    for agent in env.possible_agents:
+    for agent in env.agents:
         if not isinstance(actions[i],int):
             targetActions[agent] = np.unravel_index(np.argmax(actions[i]),actions[i].shape)[0]
         else:
@@ -55,7 +62,7 @@ def step(actions,env):
     rew_n=[]
     done_n=[]
     info_n=[]
-    for agent in env.possible_agents:
+    for agent in env.agents:
         obs_n.append(observations[agent])
         rew_n.append(rewards[agent])
         done_n.append(dones[agent])

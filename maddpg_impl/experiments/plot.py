@@ -1,9 +1,30 @@
 import pickle
 import matplotlib.pyplot as plt
 
-advNum = 4
-goodNum = 2
-td3rsVSmaddpg = None
+cooperationScene = ["simple_reference","simple_speaker_listener","simple_spread"]
+advScene =["simple_adversary","simple_crypto","simple_push","simple_tag","simple_world_comm"]
+advNum = [0,0,0,1,1,1,3,3]
+goodNum = [2,2,3,2,2,1,1,2]
+path = "./learning_curves/"
+index = 0
+for scene in cooperationScene:
+    value = []*2
+    for i in range(2):
+        fileName = path+scene+i+"_agrewards.pkl"
+        with open(fileName,"rb") as fp:
+            value[i] = pickle.load(fp)
+
+
+    maddpg = 0
+    td3 = 0
+    for i in range(goodNum[index]):
+        maddpg+=value[0][-1-i]
+        td3 +=value[1][-1-i]
+    print("maddpg:"+str(maddpg))
+    print("TD3:"+str(td3))
+
+for()
+
 
 # with open('./learning_curves/TD3(r)_agrewards.pkl', 'rb') as fp:
 #     agent_rewards = pickle.load(fp)
@@ -33,3 +54,23 @@ plt.xlabel('per 1000 episode')
 plt.ylabel('agent reward')
 plt.legend()
 plt.show()
+
+def createPlot(scenario,i,adv_num,num):
+    agrewards = []
+    rewards = []
+    with open("./learning_curves/"+scenario+i+"_agrewards.pkl", 'rb') as fp:
+        agrewards = pickle.load(fp)
+
+    with open("./learning_curves/"+scenario+i+"_rewards.pkl", 'rb') as fp:
+        rewards = pickle.load(fp)
+
+    x = [ i for i in range(len(rewards))]
+    y = [[],[]]
+    for i in range(0,len(agrewards),num):
+        sum=0
+        for j in range(adv_num):
+            sum+=agrewards[i+j]
+        y[0].append(sum)
+
+
+    

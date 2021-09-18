@@ -45,22 +45,25 @@ class EmbeddingModel(nn.Module):
 
         length = len(obs_n[0])
 
-        states = [np.empty(0) for _ in range(length)]
+        states = [np.zeros(0) for i in range(length)]
         for i in range(length):
+            # states[i] = np.append(np.empty(0),[arrays[i] for arrays in obs_n])
             for arrays in obs_n:
                 states[i] = np.append(states[i],arrays[i])
 
         states = torch.from_numpy(np.stack(states,axis=0)).float()
 
-        next_states = [np.empty(0) for _ in range(length)]
+        next_states = [np.zeros(0) for i in range(length)]
         for i in range(length):
+            # next_states[i]=np.append(np.empty(0),[arrays[i] for arrays in obs_next_n])
             for arrays in obs_next_n:
                 next_states[i]=np.append(next_states[i],arrays[i])
 
         next_states = torch.from_numpy(np.stack(next_states,axis=0)).float()
 
-        actions = [np.empty(0) for _ in range(length)]
+        actions = [ np.zeros(0) for i in range(length)]
         for i in range(length):
+            # actions[i]=np.append(np.zeros(0),[arrays[i] for arrays in act_n])
             for arrays in act_n:
                 actions[i]=np.append(actions[i],arrays[i])
         actions = torch.from_numpy(np.stack(actions,axis=0)).float()
@@ -100,7 +103,7 @@ def compute_intrinsic_reward(episodic_memory,
     dist = [d[1].item() for d in state_dist]
     dist = np.array(dist)
 
-    dist = dist / np.mean(dist)
+    dist = dist**2 / np.mean(dist)**2
 
     dist = np.max(dist - kernel_cluster_distance, 0)
     kernel = kernel_epsilon / (dist + kernel_epsilon)

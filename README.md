@@ -1,5 +1,7 @@
 # multiagent RL
 
+MPEs，其他没前途
+
 ```
 python maddpg_impl/experiments/train.py --scenario simple --num-episodes 10000 --reward-shaping-ag --reward-shaping-adv
 ```
