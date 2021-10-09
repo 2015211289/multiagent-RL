@@ -166,7 +166,7 @@ class MADDPGAgentTrainer(AgentTrainer):
         self.replay_sample_index = None
 
         # TD3
-        if self.agent_index<self.args.num_adversaries:
+        if self.agent_index < self.args.num_adversaries:
             self.policy = self.args.adv_policy
         else:
             self.policy = self.args.good_policy

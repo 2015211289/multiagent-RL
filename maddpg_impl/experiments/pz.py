@@ -1,5 +1,5 @@
 from pettingzoo.atari import pong_v2,entombed_cooperative_v2,double_dunk_v2,space_invaders_v1,maze_craze_v2,mario_bros_v2,wizard_of_wor_v2,basketball_pong_v2,boxing_v1,othello_v2,tennis_v2
-# import supersuit
+import supersuit
 import numpy as np
 
 def create_env(env_name):
@@ -28,20 +28,22 @@ def create_env(env_name):
 
     # as per openai baseline's MaxAndSKip wrapper, maxes over the last 2 frames
     # to deal with frame flickering
-    # env = supersuit.max_observation_v0(env, 2)
+    env = supersuit.max_observation_v0(env, 2)
 
     # repeat_action_probability is set to 0.25 to introduce non-determinism to the system
-    # env = supersuit.sticky_actions_v0(env, repeat_action_probability=0.25)
+    env = supersuit.sticky_actions_v0(env, repeat_action_probability=0.25)
 
     # skip frames for faster processing and less control
     # to be compatable with gym, use frame_skip(env, (2,5))
-    # env = supersuit.frame_skip_v0(env, 4)
+    env = supersuit.frame_skip_v0(env, 2)
 
     # downscale observation for faster processing
     # env = supersuit.resize_v0(env, 84, 84)
 
     # allow agent to see everything on the screen despite Atari's flickering screen problem
     # env = supersuit.frame_stack_v1(env, 4)
+
+    env = supersuit.black_death_v2(env)
     return env
 
 
