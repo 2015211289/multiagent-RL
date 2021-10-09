@@ -24,7 +24,8 @@
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/maddpg_impl/experiments/train.py",
-            "args": ["--scenario","Space_Invaders","--good-policy","maddpg","--pettingzoo","--exp-name","test"]
+            "args": ["--scenario","Space_Invaders","--adv-policy","maddpg","--pettingzoo","--exp-name","test",
+                "--reward-shaping-ag","--display"]
         },
         {
             "name": "train2",

@@ -27,10 +27,10 @@
 # 4: good->maddpg;adv->TD3
 
 
-envs=("Othello" "Box" "Tennis" "Basketball_Pong" "Double_Dunk" "Space_Invaders")
+envs=("Pong" "Box" "Tennis" "Basketball_Pong" "Double_Dunk" "Space_Invaders")
 for((i=0;i<${#envs[@]};i++));do
-    for((j=0;j<10;j++));do
+    for((j=0;j<5;j++));do
         python ./maddpg_impl/experiments/train.py --scenario ${envs[$i]} --reward-shaping-ag \
-        --exp-name $j --plots-dir "./complex_game/RSMATD3/${envs[$i]}/" --pettingzoo --adv-policy maddpg
+        --exp-name $j --plots-dir "./20211008-1/RSMATD3/${envs[$i]}/" --pettingzoo --adv-policy maddpg
     done
 done

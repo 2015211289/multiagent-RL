@@ -3,16 +3,16 @@ import numpy as np
 import os
 # use GPU or not
 # if network is small and shallow, CPU may be faster than GPU
-# os.environ["CUDA_VISIBLE_DEVICES"]="-1" 
+os.environ["CUDA_VISIBLE_DEVICES"]="-1" 
 import tensorflow as tf
 import time
 import pickle
 
-import maddpg_impl.maddpg.common.tf_util as U
-from maddpg_impl.maddpg.trainer.maddpg import MADDPGAgentTrainer
+import maddpg.common.tf_util as U
+from maddpg.trainer.maddpg import MADDPGAgentTrainer
 import tensorflow.contrib.layers as layers
-from maddpg_impl.reward_shaping.embedding_model import EmbeddingModel,compute_intrinsic_reward
-from maddpg_impl.reward_shaping.config import Config
+from reward_shaping.embedding_model import EmbeddingModel,compute_intrinsic_reward
+from reward_shaping.config import Config
 from multiagent.multi_discrete import MultiDiscrete
 
 def parse_args():
@@ -20,7 +20,7 @@ def parse_args():
     # Environment
     parser.add_argument("--scenario", type=str, default="simple_reference", help="name of the scenario script")
     parser.add_argument("--max-episode-len", type=int, default=400, help="maximum episode length")
-    parser.add_argument("--num-episodes", type=int, default=100, help="number of episodes")
+    parser.add_argument("--num-episodes", type=int, default=1000, help="number of episodes")
     parser.add_argument("--num-adversaries", type=int, default=1, help="number of adversaries")
     parser.add_argument("--good-policy", type=str, default="TD3", help="policy for good agents")
     parser.add_argument("--adv-policy", type=str, default="TD3", help="policy of adversaries")
@@ -64,7 +64,7 @@ def mlp_model(input, num_outputs, scope, reuse=False, num_units=64, rnn_cell=Non
 def make_env(scenario_name, arglist, benchmark=False):
     from multiagent.environment import MultiAgentEnv
     import multiagent.scenarios as scenarios
-    from maddpg_impl.experiments.pz import create_env
+    from experiments.pz import create_env
 
     print("env is ",arglist.scenario)
 
@@ -94,7 +94,7 @@ def make_env(scenario_name, arglist, benchmark=False):
         env = MultiAgentEnv(world, scenario.reset_world, scenario.reward, scenario.observation)
     return env
 
-def get_trainers(env, num_adversaries, obs_shape_n, arglist):
+def get_trainers(env, num_adversaries, obs_shape_n, arglist, agents):
     trainers = []
     model = mlp_model
     trainer = MADDPGAgentTrainer
@@ -102,20 +102,20 @@ def get_trainers(env, num_adversaries, obs_shape_n, arglist):
         for i in range(num_adversaries):
             trainers.append(trainer(
                 "agent_%d" % i, model, obs_shape_n, env.action_space, i, arglist,
-                local_q_func=(arglist.adv_policy=='ddpg')))
+                local_q_func=(arglist.adv_policy=='ddpg'),agent=None))
         for i in range(num_adversaries, env.n):
             trainers.append(trainer(
                 "agent_%d" % i, model, obs_shape_n, env.action_space, i, arglist,
-                local_q_func=(arglist.good_policy=='ddpg')))
+                local_q_func=(arglist.good_policy=='ddpg'),agent=None))
     else:
 
         trainers.append(trainer(
             "agent_%d" % 0, model, obs_shape_n, env.action_spaces.values(), 0, arglist,
-            local_q_func=(arglist.adv_policy=='ddpg')))
+            local_q_func=(arglist.adv_policy=='ddpg'),agent=agents[0]))
         
         trainers.append(trainer(
             "agent_%d" % 1, model, obs_shape_n, env.action_spaces.values(), 1, arglist,
-            local_q_func=(arglist.good_policy=='ddpg')))
+            local_q_func=(arglist.good_policy=='ddpg'),agent=agents[1]))
 
     return trainers
 
@@ -150,6 +150,7 @@ def train(arglist):
                         num+=(env.action_space[i].high[j]-env.action_space[i].low[j]+1)
                     action_shape_n.append(num)
         else:
+            agents=[agent for agent in (env.possible_agents)]
             obs_shape_n = [env.observation_spaces[agent].shape for agent in (env.possible_agents)]
             action_shape_n = []
             for agent in env.possible_agents:
@@ -159,7 +160,7 @@ def train(arglist):
                     action_shape_n.append(env.action_spaces[agent].shape)
 
         num_adversaries = min(99, arglist.num_adversaries)
-        trainers = get_trainers(env, num_adversaries, obs_shape_n, arglist)
+        trainers = get_trainers(env, num_adversaries, obs_shape_n, arglist, agents)
         print('Using good policy {} and adv policy {}'.format(arglist.good_policy, arglist.adv_policy))
 
         # Initialize
@@ -168,7 +169,7 @@ def train(arglist):
         # Load previous results, if necessary
         if arglist.load_dir == "":
             arglist.load_dir = arglist.save_dir
-        if arglist.display or arglist.restore or arglist.benchmark:
+        if arglist.restore or arglist.benchmark:
             print('Loading previous state...')
             U.load_state(arglist.load_dir)
 
@@ -216,20 +217,21 @@ def train(arglist):
             # env.render()
             action_n=[]
             if  train_step < arglist.start_timesteps and arglist.pettingzoo:
-                for shape in action_shape_n:
+                for agent,shape in zip(trainers,action_shape_n):
                     action = np.random.rand(shape)
                     action = action / np.sum(action)
-                    action_n.append(action)
+                    action_n.append((action,agent.agent))
 
             else:
-                action_n = [agent.action(obs) for agent, obs in zip(trainers,obs_n)]
+                action_n = [(agent.action(obs),agent.agent) for agent, obs in zip(trainers,obs_n)]
             # environment step
             if not arglist.pettingzoo:
                 new_obs_n, rew_n, done_n, info_n = env.step(action_n)
             else:
-                from maddpg_impl.experiments.pz import step 
+                from experiments.pz import step 
                 new_obs_n, rew_n, done_n, info_n = step(action_n,env)
             original_rew_n = rew_n.copy()
+            action_n = [action for action,agent in action_n]
             
             # add reward shaping
             if arglist.reward_shaping_adv == True:
@@ -237,7 +239,8 @@ def train(arglist):
                 intrinsic_reward_adv = compute_intrinsic_reward(episodic_memory_adv, next_state_emb_adv)
                 episodic_memory_adv.append(next_state_emb_adv)
                 for i in range(0,num_adversaries):
-                    rew_n[i] += Config.beta * intrinsic_reward_adv
+                    # add life long curiosity
+                    rew_n[i] += Config.beta * (1- len(episode_rewards)/arglist.num_episodes) * intrinsic_reward_adv
 
             if arglist.reward_shaping_ag == True:
                 next_state_emb_ag = embedding_model_ag.embedding(transform_obs_n(new_obs_n[num_adversaries:]))
@@ -245,10 +248,10 @@ def train(arglist):
                 episodic_memory_ag.append(next_state_emb_ag)
                 if not arglist.pettingzoo:
                     for i in range(num_adversaries,env.n):
-                        rew_n[i] += Config.beta * intrinsic_reward_ag
+                        rew_n[i] += Config.beta *(1- len(episode_rewards)/arglist.num_episodes)*  intrinsic_reward_ag
                 else:
                     for i in range(num_adversaries,len(env.possible_agents)):
-                        rew_n[i] += Config.beta * intrinsic_reward_ag
+                        rew_n[i] += Config.beta *(1- len(episode_rewards)/arglist.num_episodes) *intrinsic_reward_ag
 
             episode_step += 1
             done = all(done_n)
@@ -309,9 +312,8 @@ def train(arglist):
 
             # for displaying learned policies
             if arglist.display:
-                time.sleep(0.1)
+                # time.sleep(0.1)
                 env.render()
-                continue
 
             # update all trainers, if not in display or benchmark mode
             loss = None

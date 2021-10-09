@@ -33,10 +33,6 @@ class EmbeddingModel(nn.Module):
         return nn.Softmax(dim=1)(x)
 
     def embedding(self, x):
-        # TODO 匹配train model数据格式
-        # input = x[0]
-        # for i in range(1, len(x)):
-        #     input = np.append(input, x[i])
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         return x
