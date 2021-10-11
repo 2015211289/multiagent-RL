@@ -7,11 +7,12 @@ os.environ["CUDA_VISIBLE_DEVICES"]="-1"
 import tensorflow as tf
 import time
 import pickle
+import heapq # use heap to reduce embedding cost
 
 import maddpg.common.tf_util as U
 from maddpg.trainer.maddpg import MADDPGAgentTrainer
 import tensorflow.contrib.layers as layers
-from reward_shaping.embedding_model import EmbeddingModel,compute_intrinsic_reward
+from reward_shaping.embedding_model import EmbeddingModel
 from reward_shaping.config import Config
 from multiagent.multi_discrete import MultiDiscrete
 
@@ -20,15 +21,15 @@ def parse_args():
     # Environment
     parser.add_argument("--scenario", type=str, default="simple_reference", help="name of the scenario script")
     parser.add_argument("--max-episode-len", type=int, default=1000, help="maximum episode length")
-    parser.add_argument("--num-episodes", type=int, default=100, help="number of episodes")
+    parser.add_argument("--num-episodes", type=int, default=50, help="number of episodes")
     parser.add_argument("--num-adversaries", type=int, default=1, help="number of adversaries")
     parser.add_argument("--good-policy", type=str, default="TD3", help="policy for good agents")
     parser.add_argument("--adv-policy", type=str, default="TD3", help="policy of adversaries")
     # Core training parameters
-    parser.add_argument("--lr", type=float, default=1e-3, help="learning rate for Adam optimizer")
+    parser.add_argument("--lr", type=float, default=1e-4, help="learning rate for Adam optimizer")
     parser.add_argument("--gamma", type=float, default=0.95, help="discount factor")
-    parser.add_argument("--batch-size", type=int, default=1024, help="number of episodes to optimize at the same time")
-    parser.add_argument("--num-units", type=int, default=128, help="number of units in the mlp")
+    parser.add_argument("--batch-size", type=int, default=128, help="number of episodes to optimize at the same time")
+    parser.add_argument("--num-units", type=int, default=64, help="number of units in the mlp")
     # Checkpointing
     parser.add_argument("--exp-name", type=str, default="test", help="name of the experiment")
     parser.add_argument("--save-dir", type=str, default="./policy/", help="directory in which training state and model should be saved")
@@ -44,10 +45,10 @@ def parse_args():
     parser.add_argument("--reward-shaping-ag", action="store_true", default=False, help="whether enable reward shaping of agents")
     parser.add_argument("--reward-shaping-adv", action="store_true", default=False, help="whether enable reward shaping of adversaries")
     parser.add_argument("--policy_noise", default=0.2,type=float)      
-    parser.add_argument("--noise_clip", default=0.5,type=float)
+    parser.add_argument("--noise_clip", default=0.2,type=float)
     parser.add_argument("--policy_freq", default=2, type=int)
     parser.add_argument("--pettingzoo", action="store_true", default=False)
-    parser.add_argument("--start_timesteps", default=0, type=int)
+    parser.add_argument("--start_timesteps", default=1000, type=int)
 
 
     return parser.parse_args()
@@ -108,7 +109,6 @@ def get_trainers(env, num_adversaries, obs_shape_n, arglist, agents):
                 "agent_%d" % i, model, obs_shape_n, env.action_space, i, arglist,
                 local_q_func=(arglist.good_policy=='ddpg'),agent=None))
     else:
-
         trainers.append(trainer(
             "agent_%d" % 0, model, obs_shape_n, env.action_spaces.values(), 0, arglist,
             local_q_func=(arglist.adv_policy=='ddpg'),agent=agents[0]))
@@ -150,10 +150,10 @@ def train(arglist):
                         num+=(env.action_space[i].high[j]-env.action_space[i].low[j]+1)
                     action_shape_n.append(num)
         else:
-            agents=[agent for agent in (env.possible_agents)]
+            agents = [agent for agent in (env.possible_agents)]
             obs_shape_n = [env.observation_spaces[agent].shape for agent in agents]
             action_shape_n = []
-            for agent in env.possible_agents:
+            for agent in agents:
                 if hasattr(env.action_spaces[agent],"n"):
                     action_shape_n.append(env.action_spaces[agent].n)
                 else:
@@ -195,7 +195,7 @@ def train(arglist):
         else:
             t = env.reset()
             obs_n=[]
-            for agent in env.agents:
+            for agent in agents:
                 obs_n.append(t[agent])
 
         episode_step = 0
@@ -228,15 +228,24 @@ def train(arglist):
             if not arglist.pettingzoo:
                 new_obs_n, rew_n, done_n, info_n = env.step(action_n)
             else:
-                from experiments.pz import step 
-                new_obs_n, rew_n, done_n, info_n = step(action_n,env)
+                from experiments.pz import step
+                # 预防环境异常
+                try:
+                    new_obs_n, rew_n, done_n, info_n = step(action_n,env)
+                except Exception:
+                    t = env.reset()
+                    obs_n=[]
+                    for agent in agents:  
+                        obs_n.append(t[agent])
+                    continue
+
             original_rew_n = rew_n.copy()
             action_n = [action for action,agent in action_n]
             
             # add reward shaping
             if arglist.reward_shaping_adv == True:
                 next_state_emb_adv = embedding_model_adv.embedding(transform_obs_n(new_obs_n[0:num_adversaries]))
-                intrinsic_reward_adv = compute_intrinsic_reward(episodic_memory_adv, next_state_emb_adv)
+                intrinsic_reward_adv = embedding_model_adv.compute_intrinsic_reward(episodic_memory_adv, next_state_emb_adv)
                 episodic_memory_adv.append(next_state_emb_adv)
                 for i in range(0,num_adversaries):
                     # add life long curiosity
@@ -244,7 +253,7 @@ def train(arglist):
 
             if arglist.reward_shaping_ag == True:
                 next_state_emb_ag = embedding_model_ag.embedding(transform_obs_n(new_obs_n[num_adversaries:]))
-                intrinsic_reward_ag = compute_intrinsic_reward(episodic_memory_ag, next_state_emb_ag)
+                intrinsic_reward_ag = embedding_model_ag.compute_intrinsic_reward(episodic_memory_ag, next_state_emb_ag)
                 episodic_memory_ag.append(next_state_emb_ag)
                 if not arglist.pettingzoo:
                     for i in range(num_adversaries,env.n):
@@ -275,7 +284,7 @@ def train(arglist):
                 else:
                     t = env.reset()
                     obs_n=[]
-                    for agent in env.possible_agents:  
+                    for agent in agents:  
                         obs_n.append(t[agent])
 
                 episode_step = 0

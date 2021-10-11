@@ -2,7 +2,8 @@ import torch
 import numpy as np
 import torch.nn.functional as F
 from torch import nn, optim, Tensor
-from maddpg_impl.reward_shaping.config import Config
+from reward_shaping.config import Config
+import heapq
 
 
 class EmbeddingModel(nn.Module):
@@ -24,6 +25,8 @@ class EmbeddingModel(nn.Module):
         self.last = nn.Linear(Config.embed_hidden_size * 2, self.num_outputs)
 
         self.optimizer = optim.Adam(self.parameters(), lr=Config.embed_lr)
+
+        self.lastReward = 0
 
     def forward(self, x1, x2):
         x1 = self.embedding(x1)
@@ -77,37 +80,41 @@ class EmbeddingModel(nn.Module):
 
         self.optimizer.zero_grad()
         net_out = self.forward(states, next_states)
-        # actions_one_hot = torch.squeeze(F.one_hot(actions,
-        #                                           self.num_outputs)).float()
-        loss = nn.MSELoss()(net_out, actions)
+        mask = (actions == actions.max(dim=1,keepdim=True)[0]).to(dtype=torch.float32)
+        actions_one_hot = torch.ones_like(actions)
+        actions_one_hot = torch.mul(mask,actions_one_hot)
+        # actions_one_hot = torch.squeeze(F.one_hot((actions * 1000).to(torch.int64))).float()
+        loss = nn.MSELoss()(net_out, actions_one_hot)
         loss.backward()
         self.optimizer.step()
         return loss.item()
 
 
-def compute_intrinsic_reward(episodic_memory,
-                             current_c_state,
-                             k=10,
-                             kernel_cluster_distance=0.008,
-                             kernel_epsilon=0.0001,
-                             c=0.001,
-                             sm=8):
-    state_dist = [(c_state, torch.dist(c_state, current_c_state))
-                  for c_state in episodic_memory]
-    state_dist.sort(key=lambda x: x[1])
-    state_dist = state_dist[:k]
-    dist = [d[1].item() for d in state_dist]
-    dist = np.array(dist)
+    def compute_intrinsic_reward(self,episodic_memory,
+                                current_c_state,
+                                k=50,
+                                kernel_cluster_distance=0.008,
+                                kernel_epsilon=0.0001,
+                                c=0.001,
+                                sm=8):
+        state_dist = [(torch.dist(c_state, current_c_state).item())
+                    for c_state in episodic_memory]
+        # heapq.heapify(state_dist)
+        state_dist = heapq.nlargest(k,state_dist)
+        # state_dist = state_dist[:k]
+        # dist = [d[1].item() for d in state_dist]
+        dist = np.array(state_dist)
 
-    dist = dist**2 / np.mean(dist)**2
+        dist = dist**2 / np.mean(dist)**2
 
-    dist = np.max(dist - kernel_cluster_distance, 0)
-    kernel = kernel_epsilon / (dist + kernel_epsilon)
-    s = np.sqrt(np.sum(kernel)) + c
+        dist = np.max(dist - kernel_cluster_distance, 0)
+        kernel = kernel_epsilon / (dist + kernel_epsilon)
+        s = np.sqrt(np.sum(kernel)) + c
 
-    # if(np.sum(kernel)<=0):
-    #     print(kernel)
+        # if(np.sum(kernel)<=0):
+        #     print(kernel)
 
-    if np.isnan(s) or s > sm:
-        return 0
-    return 1 / s
+        if np.isnan(s) or s > sm:
+            return 0
+        self.lastReward = (1/s) - self.lastReward
+        return self.lastReward

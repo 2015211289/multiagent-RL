@@ -4,6 +4,7 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
             "name": "Python: Current File",
             "type": "python",
@@ -24,15 +25,16 @@
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/maddpg_impl/experiments/train.py",
-            "args": ["--scenario","Space_Invaders","--adv-policy","maddpg","--pettingzoo","--exp-name","test",
-                "--reward-shaping-ag","--display"]
+            "args": ["--scenario","Mario_Bros","--pettingzoo","--exp-name","test2",
+                "--reward-shaping-adv","--display","--reward-shaping-ag","--start_timesteps","5000"]
         },
         {
             "name": "train2",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/maddpg_impl/experiments/train.py",
-            "args": ["--scenario","Space_Invaders","--pettingzoo","--exp-name","test","--reward-shaping-ag"]
+            "args": ["--scenario","Entombed:Cooperative","--pettingzoo","--exp-name","test",
+                "--adv-policy","maddpg","--display","--good-policy","maddpg"]
         }
     ]
 }

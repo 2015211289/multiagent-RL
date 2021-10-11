@@ -1,4 +1,4 @@
-from pettingzoo.atari import pong_v2,entombed_cooperative_v2,double_dunk_v2,space_invaders_v1,maze_craze_v2,mario_bros_v2,wizard_of_wor_v2,basketball_pong_v2,boxing_v1,othello_v2,tennis_v2
+from pettingzoo.atari import ice_hockey_v1,pong_v2,entombed_cooperative_v2,double_dunk_v2,space_invaders_v1,maze_craze_v2,mario_bros_v2,wizard_of_wor_v2,basketball_pong_v2,boxing_v1,othello_v2,tennis_v2
 import supersuit
 import numpy as np
 
@@ -9,11 +9,11 @@ def create_env(env_name):
     elif env_name == "Double_Dunk":
         env = double_dunk_v2.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path="/home/seth/anaconda3/envs/RL/lib/python3.7/site-packages/multi_agent_ale_py/roms")
     elif env_name == "Space_Invaders":
-        env = space_invaders_v1.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path="/home/seth/anaconda3/envs/RL/lib/python3.7/site-packages/multi_agent_ale_py/roms")
+        env = space_invaders_v1.parallel_env(obs_type='ram',full_action_space=True,auto_rom_install_path="/home/seth/anaconda3/envs/RL/lib/python3.7/site-packages/multi_agent_ale_py/roms")
     elif env_name == "Maze_Craze":
-        env=maze_craze_v2.parallel_env(game_version="capture",visibilty_level=0,obs_type='ram',full_action_space=False,auto_rom_install_path="/home/seth/anaconda3/envs/RL/lib/python3.7/site-packages/multi_agent_ale_py/roms")
+        env = maze_craze_v2.parallel_env(game_version="race",visibilty_level=0,obs_type='ram',full_action_space=True,auto_rom_install_path="/home/seth/anaconda3/envs/RL/lib/python3.7/site-packages/multi_agent_ale_py/roms")
     elif env_name == "Mario_Bros":
-        env=mario_bros_v2.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path="/home/seth/anaconda3/envs/RL/lib/python3.7/site-packages/multi_agent_ale_py/roms")
+        env = mario_bros_v2.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path="/home/seth/anaconda3/envs/RL/lib/python3.7/site-packages/multi_agent_ale_py/roms")
     elif env_name == "Wizard_of_Wor":
         env = wizard_of_wor_v2.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path="/home/seth/anaconda3/envs/RL/lib/python3.7/site-packages/multi_agent_ale_py/roms")
     elif env_name =="Box":
@@ -23,8 +23,9 @@ def create_env(env_name):
     elif env_name == "Tennis":
         env = tennis_v2.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path="/home/seth/anaconda3/envs/RL/lib/python3.7/site-packages/multi_agent_ale_py/roms")
     elif env_name == "Pong":
-        env_name = pong_v2.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path="/home/seth/anaconda3/envs/RL/lib/python3.7/site-packages/multi_agent_ale_py/roms")
-
+        env = pong_v2.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path="/home/seth/anaconda3/envs/RL/lib/python3.7/site-packages/multi_agent_ale_py/roms")
+    elif env_name == "Entombed:Cooperative":
+        env = entombed_cooperative_v2.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path="/home/seth/anaconda3/envs/RL/lib/python3.7/site-packages/multi_agent_ale_py/roms")
 
     # as per openai baseline's MaxAndSKip wrapper, maxes over the last 2 frames
     # to deal with frame flickering
@@ -35,10 +36,10 @@ def create_env(env_name):
 
     # skip frames for faster processing and less control
     # to be compatable with gym, use frame_skip(env, (2,5))
-    env = supersuit.frame_skip_v0(env, 2)
+    env = supersuit.frame_skip_v0(env, 4)
 
     # downscale observation for faster processing
-    # env = supersuit.resize_v0(env, 84, 84)
+    # env = supersuit.resize_v0(env, 84)
 
     # allow agent to see everything on the screen despite Atari's flickering screen problem
     # env = supersuit.frame_stack_v1(env, 4)
@@ -56,7 +57,9 @@ def step(actions,env):
         else:
             targetActions[agent] = action
     
+    
     observations, rewards, dones, infos = env.step(targetActions)
+  
     # env.render()
 
     obs_n=[]

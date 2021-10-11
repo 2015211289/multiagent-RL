@@ -190,7 +190,7 @@ class MADDPGAgentTrainer(AgentTrainer):
 
         if len(self.replay_buffer) < self.max_replay_buffer_len: # replay buffer is not large enough
             return
-        if not t % 100 == 0:  # only update every 100 steps
+        if not self.total_it % 100 == 0:  # only update every 100 steps
             return
 
         self.replay_sample_index = self.replay_buffer.make_index(self.args.batch_size)
@@ -209,7 +209,7 @@ class MADDPGAgentTrainer(AgentTrainer):
         # train q network
         num_sample = 1
         target_q = 0.0
-        for i in range(num_sample):
+        for _ in range(num_sample):
             if self.policy != "TD3":                
                 target_act_next_n = [agents[i].p_debug['target_act'](obs_next_n[i]) for i in range(self.n)]
                 target_q_next = self.q1_debug['target_q_values'](*(obs_next_n + target_act_next_n))

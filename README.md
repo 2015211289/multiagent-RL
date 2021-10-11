@@ -1,7 +1,6 @@
 # multiagent RL
 
-MPEs，其他没前途
-
+Space_Invaders Tennis Pong 
 ```
 python maddpg_impl/experiments/train.py --scenario simple --num-episodes 10000 --reward-shaping-ag --reward-shaping-adv
 ```
