@@ -25,16 +25,23 @@
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/maddpg_impl/experiments/train.py",
-            "args": ["--scenario","Mario_Bros","--pettingzoo","--exp-name","test2",
-                "--reward-shaping-adv","--display","--reward-shaping-ag","--start_timesteps","5000"]
+            "args": ["--scenario","Surround","--pettingzoo","--exp-name","test2","--reward-shaping-adv","--reward-shaping-ag"]
         },
         {
             "name": "train2",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/maddpg_impl/experiments/train.py",
-            "args": ["--scenario","Entombed:Cooperative","--pettingzoo","--exp-name","test",
+            "args": ["--scenario","Surround","--pettingzoo","--exp-name","test",
                 "--adv-policy","maddpg","--display","--good-policy","maddpg"]
+        },
+        {
+            "name": "test",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/maddpg_impl/experiments/train.py",
+            "args": ["--scenario","Surround","--pettingzoo","--exp-name","test2",
+                "--reward-shaping-adv","--reward-shaping-ag","--display","--restore"]
         }
     ]
 }

@@ -21,8 +21,8 @@ class EmbeddingModel(nn.Module):
             self.num_outputs += m
 
         self.fc1 = nn.Linear(self.obs_size, Config.embed_hidden_size)
-        self.fc2 = nn.Linear(Config.embed_hidden_size, Config.embed_hidden_size)
-        self.last = nn.Linear(Config.embed_hidden_size * 2, self.num_outputs)
+        self.fc2 = nn.Linear(Config.embed_hidden_size, Config.embed_hidden_size//2)
+        self.last = nn.Linear(Config.embed_hidden_size, self.num_outputs)
 
         self.optimizer = optim.Adam(self.parameters(), lr=Config.embed_lr)
 

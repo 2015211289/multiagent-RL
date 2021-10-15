@@ -1,4 +1,4 @@
-from pettingzoo.atari import ice_hockey_v1,pong_v2,entombed_cooperative_v2,double_dunk_v2,space_invaders_v1,maze_craze_v2,mario_bros_v2,wizard_of_wor_v2,basketball_pong_v2,boxing_v1,othello_v2,tennis_v2
+from pettingzoo.atari import surround_v1,ice_hockey_v1,pong_v2,entombed_cooperative_v2,double_dunk_v2,space_invaders_v1,maze_craze_v2,mario_bros_v2,wizard_of_wor_v2,basketball_pong_v2,boxing_v1,othello_v2,tennis_v2
 import supersuit
 import numpy as np
 
@@ -26,6 +26,9 @@ def create_env(env_name):
         env = pong_v2.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path="/home/seth/anaconda3/envs/RL/lib/python3.7/site-packages/multi_agent_ale_py/roms")
     elif env_name == "Entombed:Cooperative":
         env = entombed_cooperative_v2.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path="/home/seth/anaconda3/envs/RL/lib/python3.7/site-packages/multi_agent_ale_py/roms")
+    elif env_name == "Surround":
+        env = surround_v1.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path="/home/seth/anaconda3/envs/RL/lib/python3.7/site-packages/multi_agent_ale_py/roms")
+
 
     # as per openai baseline's MaxAndSKip wrapper, maxes over the last 2 frames
     # to deal with frame flickering

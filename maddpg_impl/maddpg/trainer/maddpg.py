@@ -1,6 +1,7 @@
 import numpy as np
 import random
 import tensorflow as tf
+from tensorflow.python.util.tf_inspect import ArgSpec
 import maddpg_impl.maddpg.common.tf_util as U
 
 from maddpg_impl.maddpg.common.distributions import make_pdtype
@@ -162,7 +163,7 @@ class MADDPGAgentTrainer(AgentTrainer):
         )
         # Create experience buffer
         self.replay_buffer = ReplayBuffer(1e6)
-        self.max_replay_buffer_len = args.batch_size
+        self.max_replay_buffer_len = args.batch_size * 10
         self.replay_sample_index = None
 
         # TD3
@@ -190,7 +191,7 @@ class MADDPGAgentTrainer(AgentTrainer):
 
         if len(self.replay_buffer) < self.max_replay_buffer_len: # replay buffer is not large enough
             return
-        if not self.total_it % 100 == 0:  # only update every 100 steps
+        if not t % 100 == 0:  # only update every 100 steps
             return
 
         self.replay_sample_index = self.replay_buffer.make_index(self.args.batch_size)
