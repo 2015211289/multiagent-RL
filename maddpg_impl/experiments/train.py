@@ -11,6 +11,7 @@ import pickle
 import maddpg.common.tf_util as U
 from maddpg.trainer.maddpg import MADDPGAgentTrainer
 import tensorflow.contrib.layers as layers
+from tensorflow.contrib import rnn
 from reward_shaping.embedding_model import EmbeddingModel
 from reward_shaping.config import Config
 from multiagent.multi_discrete import MultiDiscrete
@@ -19,8 +20,8 @@ def parse_args():
     parser = argparse.ArgumentParser("Reinforcement Learning experiments for multiagent environments")
     # Environment
     parser.add_argument("--scenario", type=str, default="simple_reference", help="name of the scenario script")
-    parser.add_argument("--max-episode-len", type=int, default=500, help="maximum episode length")
-    parser.add_argument("--num-episodes", type=int, default=500, help="number of episodes")
+    parser.add_argument("--max-episode-len", type=int, default=1000, help="maximum episode length")
+    parser.add_argument("--num-episodes", type=int, default=100, help="number of episodes")
     parser.add_argument("--num-adversaries", type=int, default=1, help="number of adversaries")
     parser.add_argument("--good-policy", type=str, default="TD3", help="policy for good agents")
     parser.add_argument("--adv-policy", type=str, default="TD3", help="policy of adversaries")
@@ -47,7 +48,7 @@ def parse_args():
     parser.add_argument("--noise_clip", default=0.2,type=float)
     parser.add_argument("--policy_freq", default=2, type=int)
     parser.add_argument("--pettingzoo", action="store_true", default=False)
-    parser.add_argument("--start_timesteps", default=10240, type=int)
+    parser.add_argument("--start_timesteps", default=12800, type=int)
 
 
     return parser.parse_args()
@@ -243,23 +244,25 @@ def train(arglist):
             
             # add reward shaping
             if arglist.reward_shaping_adv == True:
-                next_state_emb_adv = embedding_model_adv.embedding(transform_obs_n(new_obs_n[0:num_adversaries]))
-                intrinsic_reward_adv = embedding_model_adv.compute_intrinsic_reward(episodic_memory_adv, next_state_emb_adv)
+                new_obs_tensor = transform_obs_n(new_obs_n[0:num_adversaries])
+                next_state_emb_adv = embedding_model_adv.embedding(new_obs_tensor)
+                intrinsic_reward_adv = embedding_model_adv.compute_intrinsic_reward(episodic_memory_adv, next_state_emb_adv,new_obs_tensor)
                 episodic_memory_adv.append(next_state_emb_adv)
                 for i in range(0,num_adversaries):
                     # can add life long curiosity
-                    rew_n[i] += Config.beta * (1-len(episode_rewards)/arglist.num_episodes) *intrinsic_reward_adv
+                    rew_n[i] += Config.beta *intrinsic_reward_adv
 
             if arglist.reward_shaping_ag == True:
-                next_state_emb_ag = embedding_model_ag.embedding(transform_obs_n(new_obs_n[num_adversaries:]))
-                intrinsic_reward_ag = embedding_model_ag.compute_intrinsic_reward(episodic_memory_ag, next_state_emb_ag)
+                new_obs_tensor = transform_obs_n(new_obs_n[num_adversaries:])
+                next_state_emb_ag = embedding_model_ag.embedding(new_obs_tensor)
+                intrinsic_reward_ag = embedding_model_ag.compute_intrinsic_reward(episodic_memory_ag, next_state_emb_ag,new_obs_tensor)
                 episodic_memory_ag.append(next_state_emb_ag)
                 if not arglist.pettingzoo:
                     for i in range(num_adversaries,env.n):
-                        rew_n[i] += Config.beta * (1-len(episode_rewards)/arglist.num_episodes) * intrinsic_reward_ag
+                        rew_n[i] += Config.beta * intrinsic_reward_ag
                 else:
                     for i in range(num_adversaries,len(env.possible_agents)):
-                        rew_n[i] += Config.beta *(1-len(episode_rewards)/arglist.num_episodes) * intrinsic_reward_ag
+                        rew_n[i] += Config.beta * intrinsic_reward_ag
 
             episode_step += 1
             done = all(done_n)
@@ -324,7 +327,8 @@ def train(arglist):
             if arglist.display:
                 # time.sleep(0.1)
                 env.render()
-                continue
+                if arglist.restore:
+                    continue
 
             # update all trainers, if not in display or benchmark mode
             loss = None
@@ -341,7 +345,7 @@ def train(arglist):
             embedding_loss_adv = None
             if train_step > 0 and (arglist.reward_shaping_adv or arglist.reward_shaping_ag):
             
-                if arglist.reward_shaping_adv == True and train_step > Config.train_episode_num:
+                if arglist.reward_shaping_adv == True and train_step > Config.train_episode_num * 100:
                     for i in range(0,num_adversaries):
                         obs, act, rew, obs_next, done = trainers[i].sample(Config.train_episode_num)
                         obs_n_train.append(obs)
@@ -350,7 +354,7 @@ def train(arglist):
 
                     embedding_loss_adv = embedding_model_adv.train_model(obs_n_train,obs_next_n_train,act_n_train)
 
-                if arglist.reward_shaping_ag == True and train_step > Config.train_episode_num:
+                if arglist.reward_shaping_ag == True and train_step > Config.train_episode_num * 100:
                     obs_n_train = []
                     obs_next_n_train = []
                     act_n_train = []

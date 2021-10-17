@@ -28,7 +28,8 @@ def create_env(env_name):
         env = entombed_cooperative_v2.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path="/home/seth/anaconda3/envs/RL/lib/python3.7/site-packages/multi_agent_ale_py/roms")
     elif env_name == "Surround":
         env = surround_v1.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path="/home/seth/anaconda3/envs/RL/lib/python3.7/site-packages/multi_agent_ale_py/roms")
-
+    elif env_name == "Ice_Hockey":
+        env = ice_hockey_v1.parallel_env(obs_type='ram',full_action_space=False,auto_rom_install_path="/home/seth/anaconda3/envs/RL/lib/python3.7/site-packages/multi_agent_ale_py/roms")
 
     # as per openai baseline's MaxAndSKip wrapper, maxes over the last 2 frames
     # to deal with frame flickering
@@ -42,11 +43,12 @@ def create_env(env_name):
     env = supersuit.frame_skip_v0(env, 4)
 
     # downscale observation for faster processing
-    # env = supersuit.resize_v0(env, 84)
+    # env = supersuit.resize_v0(env, 84,84)
 
     # allow agent to see everything on the screen despite Atari's flickering screen problem
-    # env = supersuit.frame_stack_v1(env, 4)
+    env = supersuit.frame_stack_v1(env, 4)
 
+    # avoid some agent died and action step exception
     env = supersuit.black_death_v2(env)
     return env
 

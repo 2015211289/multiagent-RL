@@ -25,7 +25,7 @@
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/maddpg_impl/experiments/train.py",
-            "args": ["--scenario","Surround","--pettingzoo","--exp-name","test2","--reward-shaping-adv","--reward-shaping-ag"]
+            "args": ["--scenario","Ice_Hockey","--pettingzoo","--exp-name","test2","--reward-shaping-adv","--reward-shaping-ag"]
         },
         {
             "name": "train2",

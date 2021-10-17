@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torch import nn, optim, Tensor
 from reward_shaping.config import Config
 import heapq
+from collections import deque
 
 
 class EmbeddingModel(nn.Module):
@@ -20,6 +21,7 @@ class EmbeddingModel(nn.Module):
         for m in num_outputs:
             self.num_outputs += m
 
+        # episode instric reward network
         self.fc1 = nn.Linear(self.obs_size, Config.embed_hidden_size)
         self.fc2 = nn.Linear(Config.embed_hidden_size, Config.embed_hidden_size//2)
         self.last = nn.Linear(Config.embed_hidden_size, self.num_outputs)
@@ -27,6 +29,13 @@ class EmbeddingModel(nn.Module):
         self.optimizer = optim.Adam(self.parameters(), lr=Config.embed_lr)
 
         self.lastReward = 0
+
+        # long term reward network
+        self.long_fc = nn.Linear(self.obs_size,Config.embed_hidden_size)
+        self.long_fc2 = nn.Linear(Config.embed_hidden_size,Config.embed_hidden_size//2)
+        self.long_stable_fc = nn.Linear(self.obs_size,Config.embed_hidden_size)
+        self.long_stable_fc2 = nn.Linear(Config.embed_hidden_size,Config.embed_hidden_size//2)
+        self.history_apha = deque(maxlen=int(1e6))
 
     def forward(self, x1, x2):
         x1 = self.embedding(x1)
@@ -38,6 +47,16 @@ class EmbeddingModel(nn.Module):
     def embedding(self, x):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
+        return x
+
+    def long_embedding(self,x):
+        x = F.relu(self.long_fc(x))
+        x = F.relu(self.long_fc2(x))
+        return x
+
+    def long_stable_embedding(self,x):
+        x = F.relu(self.long_stable_fc(x))
+        x = F.relu(self.long_stable_fc2(x))
         return x
 
     def train_model(self, obs_n, obs_next_n, act_n):
@@ -86,12 +105,18 @@ class EmbeddingModel(nn.Module):
         # actions_one_hot = torch.squeeze(F.one_hot((actions * 1000).to(torch.int64))).float()
         loss = nn.MSELoss()(net_out, actions_one_hot)
         loss.backward()
+
+        long_loss = nn.MSELoss()(self.long_embedding(states),self.long_stable_embedding(states).detach())
+        long_loss.backward()
+
         self.optimizer.step()
-        return loss.item()
+        return loss.item()+long_loss.item()
 
 
-    def compute_intrinsic_reward(self,episodic_memory,
+    def compute_intrinsic_reward(self,
+                                episodic_memory,
                                 current_c_state,
+                                new_obs_tensor,
                                 k=50,
                                 kernel_cluster_distance=0.008,
                                 kernel_epsilon=0.0001,
@@ -116,5 +141,10 @@ class EmbeddingModel(nn.Module):
 
         if np.isnan(s) or s > sm:
             return 0
-        self.lastReward = (1/s) - self.lastReward
-        return self.lastReward
+
+        long_loss = nn.MSELoss()(self.long_embedding(new_obs_tensor),self.long_stable_embedding(new_obs_tensor))
+        self.history_apha.append(long_loss.item())
+        apha = 1+ (long_loss.item()-np.mean(self.history_apha))/np.std(self.history_apha,ddof=1)
+        intrisic_reward = (1/s) * min(max(apha,1),5)
+        # self.lastReward = (1/s) - self.lastReward
+        return intrisic_reward
