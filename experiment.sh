@@ -27,10 +27,18 @@
 # 4: good->maddpg;adv->TD3
 
 
-envs=("Pong" "Box" "Tennis" "Basketball_Pong" "Double_Dunk" "Space_Invaders")
-for((i=0;i<${#envs[@]};i++));do
-    for((j=0;j<20;j++));do
-        python ./maddpg_impl/experiments/train.py --scenario ${envs[$i]} --reward-shaping-ag --reward-shaping-adv \
-        --exp-name $j --plots-dir "./20211011-1/RSMATD3/${envs[$i]}/" --pettingzoo
+com_envs=("Pong" "Box" "Tennis" "Double_Dunk")
+for((i=0;i<${#com_envs[@]};i++));do
+    for((j=0;j<10;j++));do
+        python ./maddpg_impl/experiments/train.py --scenario ${com_envs[$i]} --reward-shaping-adv \
+        --exp-name $j --plots-dir "./20211021/RSMATD3/${com_envs[$i]}/" --pettingzoo
+    done
+done
+
+coop_envs=("Mario_Bros" "Space_Invaders")
+for((i=0;i<${#coop_envs[@]};i++));do
+    for((j=0;j<10;j++));do
+        python ./maddpg_impl/experiments/train.py --scenario ${coop_envs[$i]} --reward-shaping-ag --num-adversaries 0 \
+        --exp-name $j --plots-dir "./20211021/RSMATD3/${coop_envs[$i]}/" --pettingzoo
     done
 done

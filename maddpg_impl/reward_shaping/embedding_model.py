@@ -147,4 +147,7 @@ class EmbeddingModel(nn.Module):
         apha = 1+ (long_loss.item()-np.mean(self.history_apha))/np.std(self.history_apha,ddof=1)
         intrisic_reward = (1/s) * min(max(apha,1),5)
         # self.lastReward = (1/s) - self.lastReward
+        if np.isnan(intrisic_reward):
+            return 0
+            
         return intrisic_reward

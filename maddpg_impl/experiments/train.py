@@ -28,7 +28,7 @@ def parse_args():
     # Core training parameters
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate for Adam optimizer")
     parser.add_argument("--gamma", type=float, default=0.95, help="discount factor")
-    parser.add_argument("--batch-size", type=int, default=128, help="number of episodes to optimize at the same time")
+    parser.add_argument("--batch-size", type=int, default=512, help="number of episodes to optimize at the same time")
     parser.add_argument("--num-units", type=int, default=128, help="number of units in the mlp")
     # Checkpointing
     parser.add_argument("--exp-name", type=str, default="test", help="name of the experiment")
@@ -48,7 +48,7 @@ def parse_args():
     parser.add_argument("--noise_clip", default=0.2,type=float)
     parser.add_argument("--policy_freq", default=2, type=int)
     parser.add_argument("--pettingzoo", action="store_true", default=False)
-    parser.add_argument("--start_timesteps", default=12800, type=int)
+    parser.add_argument("--start_timesteps", default=10, type=int)
 
 
     return parser.parse_args()
@@ -216,7 +216,7 @@ def train(arglist):
             # get action: possibility distribution
             # env.render()
             action_n=[]
-            if  train_step < arglist.start_timesteps and arglist.pettingzoo and not arglist.restore:
+            if len(episode_rewards) < arglist.start_timesteps and not arglist.restore:
                 for agent,shape in zip(trainers,action_shape_n):
                     action = np.random.rand(shape)
                     action = action / np.sum(action)
@@ -232,7 +232,8 @@ def train(arglist):
                 # 预防环境异常
                 try:
                     new_obs_n, rew_n, done_n, info_n = step(action_n,env)
-                except Exception:
+                except Exception as e:
+                    print(e)
                     t = env.reset()
                     obs_n=[]
                     for agent in agents:  
@@ -343,7 +344,7 @@ def train(arglist):
             act_n_train = []
             embedding_loss_ag = None
             embedding_loss_adv = None
-            if train_step > 0 and (arglist.reward_shaping_adv or arglist.reward_shaping_ag):
+            if train_step % 100 == 0  and (arglist.reward_shaping_adv or arglist.reward_shaping_ag):
             
                 if arglist.reward_shaping_adv == True and train_step > Config.train_episode_num * 100:
                     for i in range(0,num_adversaries):
@@ -379,13 +380,15 @@ def train(arglist):
                     print("steps: {}, episodes: {}, mean episode reward: {}, time: {}".format(
                         train_step, len(episode_rewards)-1, np.mean(episode_original_rewards[-arglist.save_rate-1:-1]), round(time.time()-t_start, 3)))
                 else:
-                    print("steps: {}, episodes: {}, mean episode reward: {}, agent episode reward: {}, time: {}".format(
+                    print("steps: {}, episodes: {}, mean episode reward: {}, agent episode reward: {}, {}, time: {}".format(
                         train_step, len(episode_rewards)-1, np.mean(episode_original_rewards[-arglist.save_rate-1:-1]),
-                        [np.mean(rew[-arglist.save_rate-1:-1]) for rew in agent_original_rewards], round(time.time()-t_start, 3)))
+                        [np.mean(rew[-arglist.save_rate-1:-1]) for rew in agent_original_rewards],
+                        [np.mean(rew[-arglist.save_rate-1:-1]) for rew in agent_rewards], 
+                        round(time.time()-t_start, 3)))
                 
                 # if arglist.reward_shaping_adv:
                 #     print("adv agent original episode reward: {}".format(
-                #         [np.mean(rew[-arglist.save_rate:]) for rew in agent_original_rewards[0:num_adversaries]]
+                #         [np.mean(rew[-arglist.save_rate:]) for rew in agent_rewards[0:num_adversaries]]
                 #     ))
 
                 # if arglist.reward_shaping_ag:

@@ -163,7 +163,7 @@ class MADDPGAgentTrainer(AgentTrainer):
         )
         # Create experience buffer
         self.replay_buffer = ReplayBuffer(1e6)
-        self.max_replay_buffer_len = args.batch_size * 100
+        self.max_replay_buffer_len = args.batch_size * 10
         self.replay_sample_index = None
 
         # TD3
