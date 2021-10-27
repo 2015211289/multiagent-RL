@@ -149,5 +149,5 @@ class EmbeddingModel(nn.Module):
         # self.lastReward = (1/s) - self.lastReward
         if np.isnan(intrisic_reward):
             return 0
-            
+
         return intrisic_reward

@@ -233,7 +233,7 @@ def train(arglist):
                 try:
                     new_obs_n, rew_n, done_n, info_n = step(action_n,env)
                 except Exception as e:
-                    print(e)
+                    print(repr(e))
                     t = env.reset()
                     obs_n=[]
                     for agent in agents:  
@@ -377,8 +377,9 @@ def train(arglist):
                 U.save_state(arglist.save_dir, saver=saver)
                 # print statement depends on whether or not there are adversaries
                 if num_adversaries == 0:
-                    print("steps: {}, episodes: {}, mean episode reward: {}, time: {}".format(
-                        train_step, len(episode_rewards)-1, np.mean(episode_original_rewards[-arglist.save_rate-1:-1]), round(time.time()-t_start, 3)))
+                    print("steps: {}, episodes: {}, mean episode reward: {}, {}, time: {}".format(
+                        train_step, len(episode_rewards)-1, np.mean(episode_original_rewards[-arglist.save_rate-1:-1]),
+                        np.mean(episode_rewards[-arglist.save_rate-1:-1]), round(time.time()-t_start, 3)))
                 else:
                     print("steps: {}, episodes: {}, mean episode reward: {}, agent episode reward: {}, {}, time: {}".format(
                         train_step, len(episode_rewards)-1, np.mean(episode_original_rewards[-arglist.save_rate-1:-1]),
