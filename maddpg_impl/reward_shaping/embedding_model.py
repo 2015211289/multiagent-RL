@@ -1,3 +1,4 @@
+from tensorflow.python.ops.gen_math_ops import sqrt
 import torch
 import numpy as np
 import torch.nn.functional as F
@@ -5,6 +6,7 @@ from torch import nn, optim, Tensor
 from reward_shaping.config import Config
 import heapq
 from collections import deque
+import math
 
 
 class EmbeddingModel(nn.Module):
@@ -23,19 +25,20 @@ class EmbeddingModel(nn.Module):
 
         # episode instric reward network
         self.fc1 = nn.Linear(self.obs_size, Config.embed_hidden_size)
-        self.fc2 = nn.Linear(Config.embed_hidden_size, Config.embed_hidden_size//2)
-        self.last = nn.Linear(Config.embed_hidden_size, self.num_outputs)
-
-        self.optimizer = optim.Adam(self.parameters(), lr=Config.embed_lr)
-
-        self.lastReward = 0
+        self.fc2 = nn.Linear(Config.embed_hidden_size, Config.embed_hidden_size)
+        self.last = nn.Linear(Config.embed_hidden_size * 2, self.num_outputs)
 
         # long term reward network
         self.long_fc = nn.Linear(self.obs_size,Config.embed_hidden_size)
-        self.long_fc2 = nn.Linear(Config.embed_hidden_size,Config.embed_hidden_size//2)
+        self.long_fc2 = nn.Linear(Config.embed_hidden_size,self.num_outputs)
         self.long_stable_fc = nn.Linear(self.obs_size,Config.embed_hidden_size)
-        self.long_stable_fc2 = nn.Linear(Config.embed_hidden_size,Config.embed_hidden_size//2)
-        self.history_apha = deque(maxlen=int(1e6))
+        self.long_stable_fc2 = nn.Linear(Config.embed_hidden_size,self.num_outputs)
+
+        # ave and err
+        self.stats = RunningStats()
+        self.k_th_mean = RunningStats()
+        self.optimizer = optim.Adam(self.parameters(), lr=Config.embed_lr)
+
 
     def forward(self, x1, x2):
         x1 = self.embedding(x1)
@@ -99,55 +102,93 @@ class EmbeddingModel(nn.Module):
 
         self.optimizer.zero_grad()
         net_out = self.forward(states, next_states)
-        mask = (actions == actions.max(dim=1,keepdim=True)[0]).to(dtype=torch.float32)
-        actions_one_hot = torch.ones_like(actions)
-        actions_one_hot = torch.mul(mask,actions_one_hot)
+        # mask = (actions == actions.max(dim=1,keepdim=True)[0]).to(dtype=torch.float32)
+        # actions_one_hot = torch.ones_like(actions)
+        # actions_one_hot = torch.mul(mask,actions_one_hot)
         # actions_one_hot = torch.squeeze(F.one_hot((actions * 1000).to(torch.int64))).float()
-        loss = nn.MSELoss()(net_out, actions_one_hot)
-        loss.backward()
+        loss = nn.MSELoss()(net_out, actions)
+        # loss.backward()
 
         long_loss = nn.MSELoss()(self.long_embedding(states),self.long_stable_embedding(states).detach())
-        long_loss.backward()
+
+        total_loss = loss+long_loss
+        total_loss.backward()
 
         self.optimizer.step()
-        return loss.item()+long_loss.item()
+        return total_loss.item()
 
 
     def compute_intrinsic_reward(self,
                                 episodic_memory,
                                 current_c_state,
                                 new_obs_tensor,
-                                k=50,
+                                k=10,
                                 kernel_cluster_distance=0.008,
                                 kernel_epsilon=0.0001,
                                 c=0.001,
                                 sm=8):
-        state_dist = [(torch.dist(c_state, current_c_state).item())
-                    for c_state in episodic_memory]
+        state_dist = [(torch.dist(c_state, current_c_state).item()) for c_state in episodic_memory]
+        state_dist = heapq.nsmallest(k, state_dist)
         # heapq.heapify(state_dist)
-        state_dist = heapq.nlargest(k,state_dist)
+        # state_dist = heapq.nlargest(k,state_dist)
         # state_dist = state_dist[:k]
-        # dist = [d[1].item() for d in state_dist]
         dist = np.array(state_dist)
 
-        dist = dist**2 / np.mean(dist)**2
+        self.k_th_mean.push(np.max(dist))
+        dist = dist / self.k_th_mean.mean()
 
         dist = np.max(dist - kernel_cluster_distance, 0)
         kernel = kernel_epsilon / (dist + kernel_epsilon)
         s = np.sqrt(np.sum(kernel)) + c
 
-        # if(np.sum(kernel)<=0):
-        #     print(kernel)
-
-        if np.isnan(s) or s > sm:
+        if np.isnan(s) or s>sm :
             return 0
+
+        # if np.isnan(s) or s > sm:
+        #     s = sm
 
         long_loss = nn.MSELoss()(self.long_embedding(new_obs_tensor),self.long_stable_embedding(new_obs_tensor))
-        self.history_apha.append(long_loss.item())
-        apha = 1+ (long_loss.item()-np.mean(self.history_apha))/np.std(self.history_apha,ddof=1)
-        intrisic_reward = (1/s) * min(max(apha,1),5)
-        # self.lastReward = (1/s) - self.lastReward
-        if np.isnan(intrisic_reward):
-            return 0
 
-        return intrisic_reward
+        self.stats.push(long_loss.item())
+
+        alpha = 1+ (long_loss.item()-self.stats.mean())/self.stats.deviation()
+        intrisic_reward = (1/s) * min(max(alpha,1),5)
+        # self.lastReward = (1/s) - self.lastReward
+    
+        return intrisic_reward 
+
+
+
+class RunningStats:
+
+    def __init__(self):
+        self.n = 0
+        self.old_m = 0
+        self.new_m = 0
+        self.old_s = 0
+        self.new_s = 0
+    
+    def clear(self):
+        self.n = 0
+        
+    def push(self, x):
+        self.n += 1
+        
+        if self.n == 1:
+            self.old_m = self.new_m = x
+            self.old_s = 0
+        else:
+            self.new_m = self.old_m + (x - self.old_m) / self.n
+            self.new_s = self.old_s + (x - self.old_m) * (x - self.new_m)
+            
+            self.old_m = self.new_m
+            self.old_s = self.new_s
+
+    def mean(self):
+        return self.new_m if self.n else 0.0
+    
+    def variance(self):
+        return self.new_s / (self.n - 1) if self.n > 1 else 1
+
+    def deviation(self):
+        return math.sqrt(self.variance())

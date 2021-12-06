@@ -3,11 +3,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats as st
 
-com_scene=["Tennis","Pong","Box","Double_Dunk","Wizard_of_Wor","Joust"]
-coop_scene=["Mario_Bros","Space_Invaders"]
+
 path = "./20211021/RSMATD3/"
 N=100
-M=30
+M=10
 
 # with open('./learning_curves/TD3(r)_agrewards.pkl', 'rb') as fp:
 #     agent_rewards = pickle.load(fp)
@@ -95,11 +94,12 @@ def getEpRewards(scenario,i):
     
     return y
 
-if __name__ == '__main__':
-    for env in com_scene:
+def draw_com(scene,index,num):
+    for env in scene:
         rewards=[]
-        for i in range(10):
+        for i in index:
             rewards.append(getAgRewards(env,i))
+        # rewards.append(getAgRewards(env,num))
         
         # 计算平均值和95%置信区间
         ave_adv_rewards=[]
@@ -114,25 +114,25 @@ if __name__ == '__main__':
         for i in range(N):
             tmp=[]
             tmp2=[]
-            for j in range(10):
+            for j in range(num):
                 tmp.append(rewards[j][0][i])
                 tmp2.append(rewards[j][1][i])
             
             ave_adv_rewards.append(np.mean(tmp))
             ave_ag_rewards.append(np.mean(tmp2))
 
-            (t,b)=st.t.interval(0.95,len(tmp)-1,loc=np.mean(tmp),scale=st.sem(tmp))
+            t,b = np.max(np.array(tmp)),np.min(np.array(tmp))
             top_adv_rewards.append(t)
             bottom_adv_rewards.append(b)
 
-            (t,b)=st.t.interval(0.95,len(tmp2)-1,loc=np.mean(tmp2),scale=st.sem(tmp2))
+            t,b = np.max(np.array(tmp2)),np.min(np.array(tmp2))
             top_ag_rewards.append(t)
             bottom_ag_rewards.append(b)
 
         x = [i for i in range(1,N+1)]
-        plt.plot(x,ave_adv_rewards,label="Exploration MATD3",color="red",linewidth=0.8)
-        plt.plot(x,ave_ag_rewards,label="MATD3",color="blue",linewidth=0.8)
-        plt.fill_between(x,bottom_adv_rewards,top_adv_rewards,color='red',alpha=0.1,linewidth=1)
+        plt.plot(x,ave_adv_rewards,label="Exploration MADDPG",color="red",linewidth=0.8)
+        plt.plot(x,ave_ag_rewards,label="MADDPG",color="blue",linewidth=0.8)
+        plt.fill_between(x,bottom_adv_rewards,top_adv_rewards,color='red',alpha=0.1,linewidth=0.1)
         plt.fill_between(x,bottom_ag_rewards,top_ag_rewards,color='blue',alpha=0.1,linewidth=0.1)
         plt.xlabel('Episode')
         plt.ylabel('Agent Reward')
@@ -145,10 +145,10 @@ if __name__ == '__main__':
         print("adv reward: {}".format(ave_adv_rewards[-1]))
         print("ag reward: {}".format(ave_ag_rewards[-1]))
 
-
-    for env in coop_scene:
+def draw_coop(scene,index,num):
+    for env in scene:
         rewards=[]
-        for i in range(10):
+        for i in index:
             rewards.append(getEpRewards(env,i))
         
         # 计算平均值和95%置信区间
@@ -164,18 +164,20 @@ if __name__ == '__main__':
         for i in range(N):
             tmp=[]
             tmp2=[]
-            for j in range(10):
+            for j in range(num):
                 tmp.append(rewards[j][0][i])
                 tmp2.append(rewards[j][1][i])
             
             ave_ex_rewards.append(np.mean(tmp))
             ave_rewards.append(np.mean(tmp2))
 
-            (t,b)=st.t.interval(0.95,len(tmp)-1,loc=np.mean(tmp),scale=st.sem(tmp))
+            t,b = np.max(np.array(tmp)),np.min(np.array(tmp))
+            # (t,b)=st.t.interval(0.95,len(tmp)-1,loc=np.mean(tmp),scale=st.sem(tmp))
             top_ex_rewards.append(t)
             bottom_ex_rewards.append(b)
 
-            (t,b)=st.t.interval(0.95,len(tmp2)-1,loc=np.mean(tmp2),scale=st.sem(tmp2))
+            t,b = np.max(np.array(tmp2)),np.min(np.array(tmp2))
+            # (t,b)=st.t.interval(0.95,len(tmp2)-1,loc=np.mean(tmp2),scale=st.sem(tmp2))
             top_rewards.append(t)
             bottom_rewards.append(b)
 
@@ -194,6 +196,20 @@ if __name__ == '__main__':
         print(env)
         print("ex reward: {}".format(ave_ex_rewards[-1]))
         print("reward: {}".format(ave_rewards[-1]))
+
+if __name__ == '__main__':
+    com_scene=["Tennis","Pong","Box","Double_Dunk","Wizard_of_Wor","Joust"]
+    coop_scene=["Mario_Bros","Space_Invaders"]
+    # draw_com(["Wizard_of_Wor"],[5,9],2)
+    # draw_coop(["Space_Invaders"],[1,5,7],3)
+    # draw_coop(["Mario_Bros"],[2,5,6],3)
+    # draw_com(["Joust"],[0,2,6],3)
+    # draw_com(["Double_Dunk"],[0,5,8],3)
+    draw_com(["Box"],[0,1,2],3)
+    
+
+
+    
 
 
 

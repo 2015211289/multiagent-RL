@@ -211,7 +211,7 @@ class MADDPGAgentTrainer(AgentTrainer):
         num_sample = 1
         target_q = 0.0
         for _ in range(num_sample):
-            if self.policy != "TD3":                
+            if self.policy != "matd3":                
                 target_act_next_n = [agents[i].p_debug['target_act'](obs_next_n[i]) for i in range(self.n)]
                 target_q_next = self.q1_debug['target_q_values'](*(obs_next_n + target_act_next_n))
                 target_q += rew + self.args.gamma * (1.0 - done) * target_q_next
@@ -226,16 +226,16 @@ class MADDPGAgentTrainer(AgentTrainer):
 
         q1_loss = self.q1_train(*(obs_n + act_n + [target_q]))
         q2_loss = 0
-        if self.policy == "TD3":  
+        if self.policy == "matd3":  
             q2_loss = self.q2_train(*(obs_n + act_n + [target_q]))
         # train p network
-        if self.policy =="TD3":
+        if self.policy =="matd3":
             if self.total_it % self.args.policy_freq == 0:
                 p_loss = self.p_train(*(obs_n + act_n))
         else:
             p_loss = self.p_train(*(obs_n + act_n))
 
-        if self.policy !="TD3":
+        if self.policy !="matd3":
             self.p_update()
             self.q1_update()
         else:

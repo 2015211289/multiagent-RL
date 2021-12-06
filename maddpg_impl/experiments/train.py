@@ -15,21 +15,22 @@ from tensorflow.contrib import rnn
 from reward_shaping.embedding_model import EmbeddingModel
 from reward_shaping.config import Config
 from multiagent.multi_discrete import MultiDiscrete
+from pyinstrument import Profiler
 
 def parse_args():
     parser = argparse.ArgumentParser("Reinforcement Learning experiments for multiagent environments")
     # Environment
     parser.add_argument("--scenario", type=str, default="simple_reference", help="name of the scenario script")
-    parser.add_argument("--max-episode-len", type=int, default=1000, help="maximum episode length")
-    parser.add_argument("--num-episodes", type=int, default=100, help="number of episodes")
-    parser.add_argument("--num-adversaries", type=int, default=1, help="number of adversaries")
-    parser.add_argument("--good-policy", type=str, default="TD3", help="policy for good agents")
-    parser.add_argument("--adv-policy", type=str, default="TD3", help="policy of adversaries")
+    parser.add_argument("--max-episode-len", type=int, default=2000, help="maximum episode length")
+    parser.add_argument("--num-episodes", type=int, default=500, help="number of episodes")
+    parser.add_argument("--num-adversaries", type=int, default=0, help="number of adversaries")
+    parser.add_argument("--good-policy", type=str, default="matd3", help="policy for good agents")
+    parser.add_argument("--adv-policy", type=str, default="matd3", help="policy of adversaries")
     # Core training parameters
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate for Adam optimizer")
     parser.add_argument("--gamma", type=float, default=0.95, help="discount factor")
-    parser.add_argument("--batch-size", type=int, default=512, help="number of episodes to optimize at the same time")
-    parser.add_argument("--num-units", type=int, default=128, help="number of units in the mlp")
+    parser.add_argument("--batch-size", type=int, default=1024, help="number of episodes to optimize at the same time")
+    parser.add_argument("--num-units", type=int, default=256, help="number of units in the mlp")
     # Checkpointing
     parser.add_argument("--exp-name", type=str, default="test", help="name of the experiment")
     parser.add_argument("--save-dir", type=str, default="./policy/", help="directory in which training state and model should be saved")
@@ -193,10 +194,11 @@ def train(arglist):
         if not arglist.pettingzoo:
             obs_n = env.reset()
         else:
-            t = env.reset()
-            obs_n=[]
-            for agent in agents:
-                obs_n.append(t[agent])
+            from experiments.pz import reset
+            obs_n = reset(env,agents)
+            # obs_n=[]
+            # for agent in agents:
+            #     obs_n.append(t[agent])
 
         episode_step = 0
         train_step = 0
@@ -212,6 +214,8 @@ def train(arglist):
 
         t_start = time.time()
         print('Starting iterations...')
+        # profiler = Profiler()
+        # profiler.start()
         while True:
             # get action: possibility distribution
             # env.render()
@@ -234,10 +238,8 @@ def train(arglist):
                     new_obs_n, rew_n, done_n, info_n = step(action_n,env)
                 except Exception as e:
                     print(repr(e))
-                    t = env.reset()
-                    obs_n=[]
-                    for agent in agents:  
-                        obs_n.append(t[agent])
+                    from experiments.pz import reset
+                    obs_n = reset(env,agents)
                     continue
 
             original_rew_n = rew_n.copy()
@@ -285,10 +287,8 @@ def train(arglist):
                 if not arglist.pettingzoo:
                     obs_n = env.reset()
                 else:
-                    t = env.reset()
-                    obs_n=[]
-                    for agent in agents:  
-                        obs_n.append(t[agent])
+                    from experiments.pz import reset
+                    obs_n = reset(env,agents)
 
                 episode_step = 0
                 episode_rewards.append(0)
@@ -342,11 +342,10 @@ def train(arglist):
             obs_n_train = []
             obs_next_n_train = []
             act_n_train = []
-            embedding_loss_ag = None
-            embedding_loss_adv = None
-            if train_step % 100 == 0  and (arglist.reward_shaping_adv or arglist.reward_shaping_ag):
+
+            if (arglist.reward_shaping_adv or arglist.reward_shaping_ag):
             
-                if arglist.reward_shaping_adv == True and train_step > Config.train_episode_num * 100:
+                if arglist.reward_shaping_adv == True and train_step > Config.train_episode_num * 10:
                     for i in range(0,num_adversaries):
                         obs, act, rew, obs_next, done = trainers[i].sample(Config.train_episode_num)
                         obs_n_train.append(obs)
@@ -355,7 +354,7 @@ def train(arglist):
 
                     embedding_loss_adv = embedding_model_adv.train_model(obs_n_train,obs_next_n_train,act_n_train)
 
-                if arglist.reward_shaping_ag == True and train_step > Config.train_episode_num * 100:
+                if arglist.reward_shaping_ag == True and train_step > Config.train_episode_num * 10:
                     obs_n_train = []
                     obs_next_n_train = []
                     act_n_train = []
@@ -386,6 +385,8 @@ def train(arglist):
                         [np.mean(rew[-arglist.save_rate-1:-1]) for rew in agent_original_rewards],
                         [np.mean(rew[-arglist.save_rate-1:-1]) for rew in agent_rewards], 
                         round(time.time()-t_start, 3)))
+                # profiler.stop()
+                # profiler.print()
                 
                 # if arglist.reward_shaping_adv:
                 #     print("adv agent original episode reward: {}".format(

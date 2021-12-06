@@ -25,22 +25,23 @@
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/maddpg_impl/experiments/train.py",
-            "args": ["--scenario","Space_War","--pettingzoo","--exp-name","test3","--reward-shaping-adv"]
+            "args": ["--scenario","Box","--pettingzoo","--exp-name","Box","--reward-shaping-adv","--plots-dir",
+                "./202111225/EXMATD3/Box/","--save-dir","./202111225/EXMATD3/Box/model/","--num-adversaries","1",]
         },
         {
             "name": "train2",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/maddpg_impl/experiments/train.py",
-            "args": ["--scenario","Surround","--pettingzoo","--exp-name","test",
-                "--adv-policy","maddpg","--display","--good-policy","maddpg"]
+            "args": ["--scenario","Space_Invaders","--pettingzoo","--exp-name","test",
+                "--adv-policy","maddpg","--good-policy","maddpg","--num-adversaries","1","--reward-shaping-adv"]
         },
         {
             "name": "test",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/maddpg_impl/experiments/train.py",
-            "args": ["--scenario","Surround","--pettingzoo","--exp-name","test2",
+            "args": ["--scenario","Space_Invaders","--pettingzoo","--exp-name","test2",
                 "--reward-shaping-adv","--reward-shaping-ag","--display","--restore"]
         },
         {
